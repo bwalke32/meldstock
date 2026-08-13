@@ -1,0 +1,33 @@
+// @polsia:user-owned — in-app notification inbox.
+//
+// One row per event that already fires email fan-out. Lives in its own file
+// so the saved-search + thread fan-outs can append without touching their
+// handlers' schemas. Mirrors the plain-scalar FK pattern used by Lot.postedByUserId,
+// Thread.kinds (see messaging.prisma banner), and the dashboard unread widget:
+// `userId` is a SCALAR id pointing at better-auth's locked User.id — no
+// @relation, no back-edge required on the auth side.
+//
+// Per-kind shape is free-form (Json). The server-side wire parser narrows to
+// `unknown` because the client island discriminates by `kind` and narrows in-
+// component (saved-search payload carries lot + saved-search names; thread
+// payload carries thread + sender + isRfqReply).
+enum NotificationKind {
+  SAVED_SEARCH_MATCH
+  THREAD_MESSAGE
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  // Primary read path: "list this user's notifications newest first".
+  @@index([userId, createdAt(sort: Desc)])
+  // Unread-count path: count(this user's WHERE readAt IS NULL) and the inbox
+  // badge's polling endpoint both hit this index — non-null readAt rows are
+  // excluded early.
+  @@index([userId, readAt, createdAt(sort: Desc)])
+}

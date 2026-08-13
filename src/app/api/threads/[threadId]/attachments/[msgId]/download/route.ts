@@ -1,0 +1,130 @@
+// @polsia:user-owned — GET /api/threads/[threadId]/attachments/[msgId]/download
+//
+// Per-message attachment download proxy. Same hardening as the
+// /api/lots/[id]/documents/[docId]/download sibling — re-checks the
+// thread participant gate BEFORE streaming bytes so a leaked CDN URL
+// can't be probed by a non-participant.
+//
+// 401 for unauth, 403 for auth-but-not-a-participant, 404 for non-
+// existent / wrong-thread message. Audit per access.
+import 'server-only';
+import { NextResponse } from 'next/server';
+import { isThreadParticipant } from '@/lib/business/thread-participants';
+import { prisma } from '@/lib/db';
+import { requireAuth, type SessionUser } from '@/lib/require-auth';
+import { extractIp, recordAudit } from '@/lib/security/audit';
+import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  req: Request,
+  ctx: { params: Promise<{ threadId: string; msgId: string }> },
+) {
+  let user: SessionUser;
+  try {
+    user = await requireAuth(req);
+  } catch (res) {
+    return res as Response;
+  }
+
+  try {
+    const { threadId, msgId } = await ctx.params;
+    const ip = extractIp(req) ?? headerIp(req);
+
+    const limit = checkLimit(
+      'listRead',
+      rateBucketFor(req, user.id, `thread:${threadId}:attach-download`),
+    );
+    if (!limit.allowed) {
+      await recordAudit({
+        userId: user.id,
+        actor: user.role === 'admin' ? 'ADMIN' : 'USER',
+        action: 'RATE_LIMITED',
+        resourceType: 'Message',
+        resourceId: msgId,
+        metadata: { route: '/api/threads/[threadId]/attachments/[msgId]:GET' },
+        ip,
+      });
+      return NextResponse.json(
+        { error: 'rate_limited' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs ?? 1000) / 1000)),
+          },
+        },
+      );
+    }
+
+    const [thread, msg] = await Promise.all([
+      prisma.messageThread.findUnique({
+        where: { id: threadId },
+        select: {
+          id: true,
+          buyerId: true,
+          sellerId: true,
+          createdAt: true,
+          kind: true,
+        },
+      }),
+      prisma.message.findUnique({
+        where: { id: msgId },
+        select: {
+          id: true,
+          threadId: true,
+          attachmentUrl: true,
+          attachmentFilename: true,
+          attachmentMimeType: true,
+        },
+      }),
+    ]);
+    if (!thread) {
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    }
+    const participant = await isThreadParticipant(thread, user.id);
+    if (!participant) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!msg || msg.threadId !== threadId || !msg.attachmentUrl) {
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    }
+
+    // Stream the bytes through the proxy. The R2 CDN URL stays server-
+    // side; the wire only ever sees the proxy URL.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
+    const upstream = await nodeFetch(msg.attachmentUrl);
+    if (!upstream.ok) {
+      return NextResponse.json({ error: 'Attachment temporarily unavailable' }, { status: 502 });
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+
+    await recordAudit({
+      userId: user.id,
+      actor: user.role === 'admin' ? 'ADMIN' : 'USER',
+      action: 'LOT_DOCUMENT_DOWNLOADED',
+      resourceType: 'Message',
+      resourceId: msgId,
+      metadata: {
+        threadId,
+        filename: msg.attachmentFilename ?? null,
+        bytes: buf.length,
+        kind: 'thread_attachment',
+      },
+      ip,
+    });
+
+    const safeName = (msg.attachmentFilename ?? 'attachment').replace(/"/g, '');
+    return new Response(buf, {
+      headers: {
+        'content-type': msg.attachmentMimeType ?? 'application/octet-stream',
+        'content-length': String(buf.length),
+        'content-disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+        'cache-control': 'private, no-store',
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

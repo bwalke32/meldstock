@@ -1,0 +1,99 @@
+// @polsia:user-owned — structured seller responses / counter-offers on
+// WANTED listings (mirrors offer.prisma with the buyer/seller roles
+// flipped: the RFQ poster is the "buyer" and the respondent is the
+// "seller"). File-drop schema; materialised at deploy via `prisma db
+// push` (see polsia.toml). Idempotency safe — every new column is
+// nullable or has a default so existing rows survive a redeploy.
+//
+// Each `WantedResponse` is an immutable negotiation event on the
+// per-(lot, respondent) thread: the seller's initial response, the
+// buyer's counter, etc. Counter history is preserved by creating a
+// NEW row with `parentResponseId` pointing at the one it supersedes —
+// no PRIOR response record is overwritten or deleted. Only the LATEST
+// PENDING row is actionable; the older rows are forensic history. On
+// ACCEPT, the row's `acceptedAt` is stamped AND the parent
+// `MessageThread.dealStatus` advances to ACCEPTED so the existing
+// deal-stepper takes over from there.
+//
+// `buyerId` (= lot poster) and `sellerId` (= respondent) are plain
+// SCALAR FKs to better-auth's locked `User.id` — same convention as
+// offer.prisma and messaging.prisma. Adding a `@relation` would force a
+// back-relation field on `User` (rejected by `prisma generate` and the
+// framework-owned gate). The `parentResponse → WantedResponse`
+// self-relation lives entirely in THIS file so it CAN use `@relation`
+// (both ends in user-owned models).
+//
+// `PriceUnit` and `FreightTerm` enums are NOT redeclared here — the
+// template's prisma file-drop treats enums as file-drop GLOBALS, so
+// declaring them a second time rejects `prisma db push`. Just refer
+// to them by name; they're already declared in offer.prisma.
+
+enum WantedResponseStatus {
+  PENDING
+  COUNTERED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+}
+
+model WantedResponse {
+  id                    String                @id @default(cuid())
+  // Plain-scalar FKs to locked models — no `@relation` (see file banner).
+  threadId              String
+  lotId                 String
+  // Per the brief: "buyerId = lot.postedByUserId" (the RFQ poster) and
+  // "sellerId = respondent userId". The thread's "buyer" in the existing
+  // messaging schema is actually the respondent (because they initiated
+  // the thread) — that labelling works because the find-or-create keys
+  // on `(lotId, buyerId=respondent)` and the lot poster becomes the
+  // thread's "seller".
+  buyerId               String
+  sellerId              String
+
+  // Self-relation allowed: both fields are in this file.
+  parentResponseId      String?
+  parentResponse        WantedResponse?       @relation("WantedResponseChain", fields: [parentResponseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children              WantedResponse[]      @relation("WantedResponseChain")
+
+  // Terms snapshot — preserved across counters; price is the key market-
+  // intelligence datum once status = ACCEPTED. Decimal kept to match
+  // Lot.askingPricePerLb and Offer.quantityLb.
+  quantityLb            Decimal
+  pricePerUnit          Decimal
+  priceUnit             PriceUnit             @default(PER_LB)
+  // Freighting specifics. `materialLocation` is REQUIRED — distinct from
+  // the lot's ship-to, this is where the SELLER's material sits today
+  // (where pickup would happen, etc.).
+  freightTerm           FreightTerm
+  materialLocation      String
+  // NEW per the brief (the HAVE Offer flow doesn't carry these):
+  //   leadTimeDays — days-to-ship after PO is issued.
+  //   packaging    — overrides the lot's default packaging.
+  //   lotInfo      — free-text lot/traceability info.
+  //   coaAvailable — overrides the lot's `hasCoa` for THIS response.
+  leadTimeDays          Int?
+  packaging             String?
+  lotInfo               String?
+  coaAvailable          Boolean               @default(false)
+  paymentTerms          String?
+  comments              String?
+
+  // Required per the brief: every response carries its own expiry.
+  offerExpiresAt        DateTime
+  status                WantedResponseStatus  @default(PENDING)
+  createdAt             DateTime              @default(now())
+  counteredAt           DateTime?
+  acceptedAt            DateTime?
+  declinedAt            DateTime?
+  withdrawnAt           DateTime?
+
+  @@index([threadId, createdAt])
+  @@index([lotId, status])
+  @@index([parentResponseId])
+  // Powers the future "market intelligence" aggregate (anonymised averages
+  // per polymer/condition/grade/region) — only COUNT/AVG on ACCEPTED rows
+  // is ever exposed through any future aggregate endpoint, never the
+  // individual row.
+  @@index([status, acceptedAt])
+}

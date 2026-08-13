@@ -1,0 +1,78 @@
+// @polsia:user-owned — professional profiles + company-verification workflow.
+// Materialised at deploy via `prisma db push`. Every column is optional or has
+// a default so redploys on existing DBs stay idempotent.
+//
+// `userId` is a plain SCALAR FK to better-auth's locked `User.id`. No
+// `@relation` — User lives in the framework-owned prisma/schema/auth.prisma and
+// a Prisma `@relation` here would force a back-relation field on the locked
+// User, which the gate rejects. Reads by id use
+// `prisma.profile.findUnique({ where: { userId } })`.
+
+enum BusinessRole {
+  BROKER_TRADER
+  INJECTION_MOLDER
+  EXTRUDER
+  BLOW_MOLDER
+  THERMOFORMER
+  RECYCLER_REPROCESSOR
+  COMPOUNDER
+  DISTRIBUTOR
+  RESIN_PRODUCER
+  SCRAP_GENERATOR
+  MANUFACTURER
+  BUYER
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Profile {
+  id                  String            @id @default(cuid())
+  userId              String            @unique
+  accountType         String            @default("INDIVIDUAL")
+  displayName         String
+  companyName         String?
+  positionTitle       String?
+  role                BusinessRole
+  location            String?
+  country             String?
+  companyDescription  String?
+  materialsBought     Json?
+  materialsSold       Json?
+  yearsInBusiness     Int?
+  websiteUrl          String?
+  phone               String?
+  publicEmail         String?
+  socialTwitter       String?
+  socialLinkedin      String?
+  socialInstagram     String?
+  isAdmin             Boolean           @default(false)
+  verificationStatus  VerificationStatus @default(UNVERIFIED)
+  verifiedAt          DateTime?
+  handle              String            @unique
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([verificationStatus])
+  @@index([role])
+}
+
+model VerificationRequest {
+  id                       String            @id @default(cuid())
+  profileId                String
+  requestedAt              DateTime          @default(now())
+  decidedAt                DateTime?
+  status                   VerificationStatus @default(PENDING)
+  requestedDocumentsText   String?
+  reviewerNote             String?
+  reviewedByUserId         String?
+
+  @@index([status, requestedAt])
+  @@index([profileId])
+  @@index([profileId, status])
+}

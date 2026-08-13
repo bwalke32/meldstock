@@ -1,0 +1,90 @@
+// @polsia:user-owned — structured offers / counter-offers on HAVE listings.
+// File-drop schema: lives at prisma/schema/offer.prisma, materialised at
+// deploy via `prisma db push` (see polsia.toml). Idempotency safe — every
+// new column is nullable or has a default so existing rows survive a
+// redeploy.
+//
+// Each `Offer` is an immutable negotiation event on a thread: the buyer's
+// initial ask, a seller's counter, etc. Counter history is preserved by
+// creating a NEW row with `parentOfferId` pointing at the one it
+// supersedes — no PRIOR offer record is overwritten or deleted. Only the
+// LATEST PENDING row on a thread is actionable; the older rows are
+// forensic history. On ACCEPT, the `Offer` row's `acceptedAt` is stamped
+// AND the parent `MessageThread.dealStatus` advances to ACCEPTED so the
+// existing deal-stepper takes over from there.
+//
+// `buyerId` and `sellerId` are plain SCALAR FKs to better-auth's locked
+// `User.id` — same convention as `lots.prisma` and `messaging.prisma`,
+// because adding a `@relation` would force a back-relation field on
+// `User` (rejected by `prisma generate` / the framework-owned gate).
+// The `parentOffer → Offer` self-relation lives entirely in THIS file, so
+// it CAN use `@relation` (both ends in the same user-owned model).
+
+enum OfferStatus {
+  PENDING      // open, awaiting action by the counterpart
+  COUNTERED    // supplanted by a child offer row — history preserved
+  ACCEPTED     // winning offer; only one per thread ever
+  DECLINED     // counterpart said no
+  EXPIRED      // expiresAt passed without action (computed; written by sweep)
+  WITHDRAWN    // offering party pulled it back while still PENDING
+}
+
+enum PriceUnit {
+  PER_LB
+  PER_KG
+}
+
+enum FreightTerm {
+  EXW
+  FOB
+  DELIVERED
+  FREIGHT_COLLECT
+  FREIGHT_PREPAID
+}
+
+model Offer {
+  id                    String        @id @default(cuid())
+  // Plain-scalar FKs to locked models — no `@relation` (see file banner).
+  threadId              String
+  lotId                 String
+  buyerId               String
+  sellerId              String
+
+  // Self-relation allowed: both fields are in this file.
+  parentOfferId         String?
+  parentOffer           Offer?        @relation("OfferChain", fields: [parentOfferId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children              Offer[]       @relation("OfferChain")
+
+  // Terms snapshot — preserved across counters; price is the key market-
+  // intelligence datum once status = ACCEPTED. Decimal kept to match
+  // Lot.askingPricePerLb.
+  quantityLb            Decimal
+  pricePerUnit          Decimal
+  priceUnit             PriceUnit     @default(PER_LB)
+  freightTerm           FreightTerm
+  shipToZipCode         String?
+  shipToCity            String?
+  shipToState           String?
+  shipToCountry         String?
+  requestedDeliveryDate DateTime?
+  paymentTerms          String?
+  comments              String?
+
+  // Required per the brief: every offer carries its own expiry.
+  offerExpiresAt        DateTime
+  status                OfferStatus   @default(PENDING)
+  createdAt             DateTime      @default(now())
+  counteredAt           DateTime?     // stamped exactly once on COUNTERED
+  acceptedAt            DateTime?
+  declinedAt            DateTime?
+  withdrawnAt           DateTime?
+
+  @@index([threadId, createdAt])
+  @@index([lotId, status])
+  @@index([parentOfferId])
+  // Powers the future "market intelligence" aggregate (anonymised averages
+  // per polymer/condition/grade/region) — only COUNT/AVG on ACCEPTED rows
+  // is ever exposed through any future aggregate endpoint, never the
+  // individual row.
+  @@index([status, acceptedAt])
+}

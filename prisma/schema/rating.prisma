@@ -1,0 +1,40 @@
+// @polsia:user-owned — 5-dimension bilateral ratings on completed
+// MessageThread deals. A single row is ONE rater's score for ONE dimension
+// on ONE thread; the form submits 5 rows in one round-trip. The
+// `@@unique([threadId, raterId, dimension])` triple is the dedupe guard so
+// a re-submit of the same dimension by the same rater hits Prisma's P2002
+// and the route surfaces 409 instead of silently double-counting. The
+// `@@index([rateeId, dimension])` powers the public aggregate read on
+// /api/ratings/aggregate/[userId] — count/avg grouped by dimension.
+//
+// `threadId`/`raterId`/`rateeId` are plain scalar FKs (no `@relation`):
+// `MessageThread` is in messaging.prisma and `User` is in the locked
+// auth.prisma, so a `@relation` here would force back-relation fields in
+// files the ownership gate rejects. Reads join by id explicitly when the
+// caller needs display names.
+//
+// `score` is constrained 1–5 — the contract pins this; the route
+// additionally rejects 0/negative client input.
+
+enum RatingDimension {
+  MATERIAL_MATCH
+  DOCUMENTATION
+  PAYMENT
+  SHIPPING
+  COMMUNICATION
+}
+
+model Rating {
+  id        String          @id @default(cuid())
+  threadId  String
+  raterId   String
+  rateeId   String
+  dimension RatingDimension
+  score     Int
+  comment   String?
+  createdAt DateTime        @default(now())
+
+  @@unique([threadId, raterId, dimension])
+  @@index([rateeId, dimension])
+  @@index([threadId])
+}

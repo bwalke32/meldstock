@@ -1,0 +1,24 @@
+// @polsia:user-owned — append-only audit log for sensitive broker-controlled
+// actions (visibility changes, document access, deal closeouts, ANONYMOUS-
+// scrubbed fan-outs, verification requests). Sits alongside the other
+// user-owned feature schemas — no edit on the framework-owned _base.prisma
+// or auth.prisma. Plain-scalar FK to better-auth's locked `User.id` — no
+// `@relation` back-edge. Idempotent on `db push`: every column is nullable
+// or has a default so existing DBs survive a redeploy.
+
+model AuditEvent {
+  id           String   @id @default(cuid())
+  userId       String?
+  actor        String   // 'USER' | 'ADMIN' | 'SYSTEM' — controlled at the recorder call site
+  action       String   // see AuditAction in src/lib/contracts/audit.ts
+  resourceType String   // 'Lot' | 'Thread' | 'Document' | etc.
+  resourceId   String?
+  metadata     Json
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([resourceType, resourceId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}

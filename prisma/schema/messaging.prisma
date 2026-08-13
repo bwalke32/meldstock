@@ -1,0 +1,197 @@
+// @polsia:user-owned — message threads spanning listing-scoped
+// (1:1 + N-way group) and broker-group rooms (not tied to a single lot).
+// Materialised at deploy via `prisma db push` (see polsia.toml). Every
+// column is optional or has a default so redploys on existing DBs stay
+// idempotent.
+//
+// `buyerId`, `sellerId`, `senderId`, `ThreadParticipant.userId` and
+// `ThreadParticipant.addedBy` are plain SCALAR FKs to better-auth's locked
+// `User.id` — NO `@relation`. A `@relation` here would force a back-relation
+// field on the locked `User`, which the gate rejects (`lots.prisma` shares
+// the same plain-scalar convention for `Lot.postedByUserId`). Reads by id
+// use `prisma.user.findMany({ where: { id: { in: ids } } })`.
+//
+// `MessageThread.lotId`, `buyerId`, `sellerId` are plain scalars AND now
+// nullable — the broker-group room kind has none of them. Legacy 1:1 rows
+// keep all three, broker-group rows have all three null. Postgres treats
+// distinct NULLs as distinct, so `@@unique([lotId, buyerId])` still
+// enforces dedup for legacy rows and silently allows many rooms per
+// (null, null) pair. The two-sided `Message ↔ MessageThread` and
+// `MessageThread ↔ ThreadParticipant` relations below are fine because
+// BOTH models live in this same user-owned file.
+
+enum ThreadKind {
+  LISTING
+  RFQ
+  BROKER_GROUP
+}
+
+// Per-thread transaction state. Threads start PENDING. Either side can flip
+// → COMPLETED when the underlying deal closes (which unlocks the 5-dimension
+// rating form on the partner). CANCELED is a one-way out for either side to
+// end a negotiation without rating. COMPLETED is terminal — back-flips to
+// PENDING/CANCELED are rejected at the route (409) so the rating submit
+// endpoint can trust the state it reads. Group rooms (BROKER_GROUP) are
+// permanently PENDING because there is no buyer/seller pair to rate.
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
+// Front-of-the-pipeline deal progression — `OFFER → ACCEPTED → PO_ISSUED →
+// PICKUP_SCHEDULED → IN_TRANSIT → DELIVERED → COMPLETED`. Rendered as a
+// compact horizontal stepper on /lots/[id] and inside the thread view.
+// Distinct from `TransactionStatus` above (which is the closeout lifetime
+// that the rating form depends on): same thread can be `dealStatus =
+// COMPLETED` and `status = PENDING` until someone closes the deal. Only
+// the seller (or admin) can monotonically advance forward via the
+// /api/threads/[id]/deal-status route. Defaults to OFFER so existing rows
+// stay valid after a `db push` without an explicit migration. Unused on
+// BROKER_GROUP rooms (which have no buyer/seller pair) — the UI simply
+// hides the strip.
+enum DealStatus {
+  OFFER
+  ACCEPTED
+  PO_ISSUED
+  PICKUP_SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+}
+
+model MessageThread {
+  id            String             @id @default(cuid())
+  lotId         String?
+  buyerId       String?
+  sellerId      String?
+  subject       String
+  createdAt     DateTime           @default(now())
+  lastMessageAt DateTime           @default(now())
+  messages      Message[]
+  readStates    ThreadReadState[]
+  // Per-thread discriminator. LISTING = legacy 1:1 + group on a specific
+  // lot; RFQ = a thread opened by replying to a WANTED listing (lotId
+  // still set); BROKER_GROUP = a non-lot room anyone in the creator's
+  // network / verified-companies pool can be added to. Defaults to
+  // LISTING so existing rows stay valid after `db push` without a
+  // migration.
+  kind          ThreadKind         @default(LISTING)
+  // Optional free-text description visible in the right-pane header —
+  // used by broker-group rooms to describe purpose. Null for listing
+  // threads.
+  description   String?
+  // Creator of a broker-group room. Only populated for `BROKER_GROUP`;
+  // null for listing/RFQ threads. Cheap "my rooms" queries via the
+  // index below.
+  createdById   String?
+  // For WANTED lots the buyer's reply creates an RFQ-scoped thread. `rfqId`
+  // points at the source lot id (the lot IS the RFQ). Nullable so existing
+  // rows stay valid; `db push` requires either a default or `?` on any
+  // column that may already have rows. Plain scalar -- no `@relation` --
+  // because `Lot` lives in another user-owned file and a
+  // relation there would fail `prisma generate` (locked back-relation).
+  rfqId         String?
+  // Group-thread participants: every listing-scoped thread now goes through
+  // this join table for access + simultaneous-render. `buyerId` / `sellerId`
+  // stay above as "seed" columns (so the existing `LotId_buyerId` upsert
+  // + initial 1:1 row materialisation still work); on first read the route
+  // backfills `ThreadParticipant` rows for them.
+  participants ThreadParticipant[]
+  // Lifecycle of the underlying deal. Defaults to PENDING so existing rows
+  // remain valid after `db push` without a migration. `completedAt` is
+  // stamped on the COMPLETED transition only and powers "deal closed N
+  // days ago" copy on the rating card.
+  status        TransactionStatus @default(PENDING)
+  completedAt   DateTime?
+  // Optional — likewise stamped once on the CANCELED transition, not back-
+  // filled.
+  canceledAt    DateTime?
+  // Front-of-the-pipeline deal progression (see `DealStatus` above).
+  // Distinct from the closeout `status` column — same thread can be
+  // `dealStatus = COMPLETED` while the operational status is still
+  // PENDING (the closeout pill hasn't been flipped). Defaults to OFFER
+  // so existing rows stay valid after `db push` without an explicit
+  // migration file. BROKER_GROUP rooms carry the default and ignore it
+  // (the UI hides the strip).
+  dealStatus             DealStatus @default(OFFER)
+  // Stamped on every advance. Null until the first transition. Powers
+  // "advanced N ago" copy on the lot detail + thread header.
+  dealStatusUpdatedAt    DateTime?
+  // Plain-scalar FK to better-auth's locked `User.id` (no @relation — see
+  // this file's banner). Populated to the caller of the PATCH on each
+  // advance so the wire can render "<name> advanced this to PO_ISSUED".
+  // Null until the first advance.
+  dealStatusAdvancedBy   String?
+
+  @@unique([lotId, buyerId])
+  @@index([buyerId, lastMessageAt(sort: Desc)])
+  @@index([sellerId, lastMessageAt(sort: Desc)])
+  @@index([lotId])
+  @@index([rfqId])
+  @@index([kind, lastMessageAt(sort: Desc)])
+  @@index([createdById])
+  // Cheap "completed deals" queries — e.g. listing every COMPLETED thread
+  // the caller was a participant of to render a "track record" card later.
+  @@index([status, lastMessageAt(sort: Desc)])
+  // Future "open deals" filter — e.g. a staff dashboard listing every
+  // thread currently advancing through the stepper. Cheap on its own
+  // because `dealStatus` is the leading column.
+  @@index([dealStatus, lastMessageAt(sort: Desc)])
+}
+
+// Per-user read cursor on a thread. Without it every conversation is, by
+// definition, "unread" — this table is what the /dashboard unread widget keys
+// off and the inbox detail page bumps when a participant opens a thread.
+// Tracking a timestamp (rather than a boolean or per-message marker) keeps it
+// append-only and cheap: one row per (thread, user) updated with a single
+// upsert at "read" time.
+//
+// `userId` is a plain SCALAR FK to better-auth's locked `User.id` — see the
+// file banner for why this file favours scalars over `@relation` for cross-
+// domain FKs. The `thread` `@relation` below is fine because BOTH models live
+// in this same user-owned file; cascade on delete mirrors `Message`'s.
+model ThreadReadState {
+  thread     MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId   String
+  userId     String
+  lastReadAt DateTime      @default(now())
+
+  @@id([threadId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id                 String        @id @default(cuid())
+  threadId           String
+  thread             MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId           String
+  body               String
+  attachmentUrl      String?
+  attachmentFilename String?
+  attachmentMimeType String?
+  createdAt          DateTime      @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+// Group-thread roster. The composite primary key is the only natural id: a
+// thread never has two rows for the same user, and a user is never in a
+// thread twice. This is also what makes the first-read backfill idempotent
+// (upsert by composite key → existing rows are a no-op).
+//
+// `userId` and `addedBy` are plain SCALAR FKs to the locked `User.id` (see
+// the file banner). `addedBy` is null on the buyer/seller seed rows produced
+// by the backfill so the column records "who added you" for human-added
+// participants only. The `thread` `@relation` lives here because BOTH
+// participant and thread live in the same user-owned file.
+model ThreadParticipant {
+  thread   MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId String
+  userId   String
+  addedAt  DateTime      @default(now())
+  addedBy  String?
+
+  @@id([threadId, userId])
+  @@index([userId])
+}

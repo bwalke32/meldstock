@@ -1,0 +1,31 @@
+// @polsia:user-owned — saved browse searches + email-on-match. Materialised at
+// deploy via `prisma db push`. Idempotent — every column has a default so a
+// redeploy on an existing DB is safe.
+//
+// `userId` is a plain SCALAR FK to better-auth's locked `User.id`. No
+// `@relation` — User lives in the framework-owned prisma/schema/auth.prisma and
+// a Prisma `@relation` here would force a back-relation field on the locked
+// User, which the gate rejects. Reads by id use
+// `prisma.savedSearch.findMany({ where: { userId } })`.
+
+model SavedSearch {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  // The same `LotFilter` shape used by /api/lots and the browse island (see
+  // src/lib/contracts/lots-filters.ts). JSON-stored so future filter axes
+  // don't require a schema migration.
+  filterJson  Json
+  // Toggle for the /api/lots#fanOutSavedSearchMatches email-on-match path.
+  // Defaults to true so existing rows opt-in to alerting; flipping it off
+  // keeps the row visible on /dashboard/saved-searches but silences fan-out.
+  alertEnabled   Boolean   @default(true)
+  // Last delivered email timestamp (the fan-out path stamps this once per
+  // success — null = never sent). Read-side only — set server-side after
+  // either the email OR the in-app notification row succeeds.
+  lastAlertSentAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, name])
+}

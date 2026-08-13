@@ -1,0 +1,175 @@
+// @polsia:user-owned — plastics-resin trading-floor lots + per-lot threads.
+// File-drop schema: lives at prisma/schema/lots.prisma, materialized at deploy
+// via `prisma db push` (see polsia.toml). Idempotency safe — every new column
+// either has a default or is nullable so existing rows survive a redeploy.
+
+enum LotType {
+  HAVE
+  WANTED
+}
+
+// Per-listing visibility — controls who can see the row on /lots and
+// /lots/[id], and how the seller is identified. Defaults to PUBLIC for
+// backwards-compat with rows already sitting in the DB.
+enum LotVisibility {
+  PUBLIC
+  VERIFIED_COMPANIES_ONLY
+  // MY_NETWORK: only users the lister has added as a Connection can see it.
+  SELECTED_COMPANIES
+  MY_NETWORK
+  ANONYMOUS
+}
+
+enum Polymer {
+  ABS
+  PC
+  PP
+  PE_HDPE
+  PE_LDPE
+  PE_LLDPE
+  PA6
+  PA66
+  PA612
+  PBT
+  PET
+  POM
+  PPS
+  TPU
+  TPV
+  TPE
+  HIPS
+  GPPS
+  OTHER
+}
+
+enum LotCondition {
+  PRIME_VIRGIN
+  OFF_GRADE_WIDE_SPEC
+  REPROCESSED
+  RECYCLED_CONTENT
+  REGRIND_GRANULATED
+  SCRAP
+  PARTS_SPRUES_RUNNERS
+  PURGE
+  POST_INDUSTRIAL
+  POST_CONSUMER
+  MASTERBATCH_COMPOUND
+  OTHER
+}
+
+// Lifecycle status — drives browse/search filters (only ACTIVE rows show
+// publicly to non-owners) and the staleness banner + cron nudge job. The
+// poster (or admin) flips ACTIVE → SOLD/DEACTIVATED via the lifecycle
+// endpoints; the cron flips ACTIVE → EXPIRED once a lot has gone too long
+// without a refresh + a nudge.
+enum LotLifecycleStatus {
+  ACTIVE
+  SOLD
+  EXPIRED
+  DEACTIVATED
+}
+
+model Lot {
+  id              String        @id @default(cuid())
+  type            LotType       @default(HAVE)
+  polymer         Polymer
+  condition       LotCondition
+  color           String
+  form            String
+  manufacturer    String?
+  grade           String?
+  quantityLb      Decimal       @default(0)
+  packaging       String
+  location        String?
+  country         String        @default("")
+  askingPricePerLb Decimal?
+  hasCoa          Boolean       @default(false)
+  notes           String?
+  postedByName    String
+  // Plain-scalar FK to better-auth's locked User.id (no @relation — see
+  // `auth.prisma` for why). Null on legacy/anonymous lots so redploys stay
+  // idempotent; signed-in posters set it on create.
+  postedByUserId  String?
+  visibility      LotVisibility @default(PUBLIC)
+  // Free-form list of handles OR email addresses (lowercased on write) that
+  // can see a SELECTED_COMPANIES lot. Matched against the viewer's profile
+  // handle OR auth user email at read time — a missing profile still matches
+  // by email alone. Null on every non-SELECTED_COMPANIES row so the column
+  // costs nothing for the public / verified tiers.
+  selectedCompanyIdentifiers Json?
+  createdAt       DateTime      @default(now())
+  // Lifecycle columns (added in the inventory-lifecycle brief). Every new
+  // column is nullable / defaulted so existing rows survive a redeploy.
+  //   postedAt          — explicit surface of createdAt for the dashboard
+  //                       "posted X ago" line (kept as an alias column so
+  //                       the lifecycle helper never has to read both).
+  //   lastUpdatedAt     — bumped on every owner write. Drives the staleness
+  //                       window (cron reads `lastUpdatedAt < now-30d`).
+  //   quantityRemaining — what is still offered (0..quantityLb). Decrement
+  //                       per the lifecycle brief when a partial deal
+  //                       closes; full close sets it to 0 and status=SOLD.
+  //   status            — see LotLifecycleStatus above. ACTIVE for fresh
+  //                       lots and stays ACTIVE through refresh / edit /
+  //                       confirm-available. SOLD / DEACTIVATED on
+  //                       explicit owner action. EXPIRED after the cron
+  //                       marks a long-idle lot if it wasn't confirmed.
+  //   lastNudgedAt      — last cron nudge for this lot. Drives the
+  //                       "should we re-nudge?" dedupe in the cron job.
+  //   lastConfirmedAt   — last "still have this?" confirmation. Flips
+  //                       EXPIRED → ACTIVE on the confirm endpoint.
+  postedAt           DateTime             @default(now())
+  lastUpdatedAt      DateTime             @default(now())
+  quantityRemaining  Decimal              @default(0)
+  status             LotLifecycleStatus   @default(ACTIVE)
+  lastNudgedAt       DateTime?
+  lastConfirmedAt    DateTime?
+
+  @@index([type, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([postedByUserId])
+  @@index([visibility])
+  // Helps the connections-filter on browse / fan-out — narrows visibility
+  // scan to the (poster, tier) pairs that actually need gating.
+  @@index([postedByUserId, visibility])
+  // Owner dashboard pagination + the staleness scan (status, lastUpdatedAt).
+  @@index([postedByUserId, status])
+  @@index([status, lastUpdatedAt])
+}
+
+model LotMessage {
+  id         String   @id @default(cuid())
+  lotId      String
+  body       String
+  senderName String
+  createdAt  DateTime @default(now())
+
+  @@index([lotId, createdAt])
+}
+
+// Per-listing documents (COA, TDS, SDS, certifications, test reports, …).
+// The list is purely PDF; the brief redefined `hasCoa` to mean "at least one
+// document is attached", so the lot-detail read joins on this collection and
+// the documents POST endpoint flips `hasCoa = true` after the first upload.
+enum DocumentType {
+  COA
+  TDS
+  SDS
+  CERTIFICATION
+  TEST_REPORT
+  OTHER
+}
+
+model Document {
+  id        String       @id @default(cuid())
+  // Scalar FK to Lot.id — no @relation back-edge to Lot (Lot is in the same
+  // file, so a relation would be allowed, but matching the broader codebase
+  // pattern of using scalar FKs for cross-model links keeps reads explicit).
+  lotId     String
+  type      DocumentType @default(OTHER)
+  filename  String
+  url       String
+  mimeType  String       @default("application/pdf")
+  createdAt DateTime     @default(now())
+
+  @@index([lotId, createdAt])
+}

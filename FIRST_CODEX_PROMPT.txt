@@ -1,0 +1,58 @@
+You are taking over an EXISTING application called Meldstock. Do not rewrite it and do not begin adding product features.
+
+First read, in this order:
+1. AGENTS.md
+2. CODEX_HANDOFF.md
+3. package.json
+4. the archived AGENTS.polsia.md
+5. .polsia/installed.json, .polsia/ownership.json, and polsia.toml
+6. Prisma schemas
+7. src/lib/env.ts and src/lib/auth.ts
+8. the API routes and tests relevant to auth, lots, files, messaging, offers, RFQs, and AI
+
+The Polsia ownership restrictions are historical. We are intentionally migrating the application out of Polsia, but preserve the old files for reference.
+
+YOUR FIRST TASK IS AUDIT + BASELINE ONLY.
+
+Do not make broad refactors yet.
+Do not change the Prisma schema yet.
+Do not add new features.
+Do not ask me for production secrets.
+Do not delete .polsia files yet.
+
+Please:
+
+1. Inspect the entire repository and summarize the architecture.
+2. Check the local machine/repository for Node/npm/Git prerequisites and identify anything missing.
+3. Attempt safe baseline checks where possible:
+   - npm install or npm ci
+   - npm run typecheck
+   - npm test
+   - npm run lint
+   - npm run build
+   Do not fabricate success. If env/database/provider dependencies block a check, document the exact blocker.
+4. Verify the known handoff findings in CODEX_HANDOFF.md against the code and correct any inaccuracies.
+5. Search for every Polsia-specific runtime dependency and hard-coded Polsia URL/domain.
+6. Audit authentication and authorization for commercial mutations and private reads, with special attention to:
+   - POST /api/lots
+   - AI chat endpoint
+   - documents/attachments
+   - messages/threads
+   - offers/counters/acceptance
+   - WANTED responses/RFQs
+   - saved searches
+   - private/network/anonymous listing visibility
+7. Identify any IDOR, ownership spoofing, unauthenticated mutation, private-data leak, or metered-endpoint abuse risk.
+8. Review how database deployment currently works and identify the safest path from `db push --accept-data-loss` to committed Prisma migrations.
+9. Review existing tests and tell me what critical security/business workflows are not covered.
+10. Create `docs/CODEX_BASELINE_AUDIT.md` containing:
+    - architecture
+    - local run blockers
+    - Polsia dependency map
+    - critical security findings ranked P0/P1/P2
+    - test/build status
+    - proposed migration phases
+    - exact files expected to change in Phase 1
+    - open questions requiring human/provider decisions
+
+At the end, give me a concise terminal summary and STOP. Do not implement the migration until I review the audit.

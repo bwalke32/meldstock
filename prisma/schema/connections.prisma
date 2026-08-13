@@ -1,0 +1,25 @@
+// @polsia:user-owned — bidirectional user connections ("My network") backing
+// the MY_NETWORK visibility tier on lot postings.
+//
+// `userIdA` / `userIdB` are PLAIN SCALAR FKs to better-auth's locked `User.id`
+// — no `@relation`, because the locked `auth.prisma` model can't carry a
+// matching back-relation field (see ../../../../.agents/skill-docs/nextjs-prisma).
+//
+// A connection is a LOGICAL PAIR (a, b) where a < b — application code
+// normalises on write so the unique constraint applies to one row per pair
+// and a single index scan in either direction finds everyone's connections:
+//     prisma.connection.findMany({ where: { OR: [{ userIdA: me }, { userIdB: me }] } })
+//
+// V1 has no request/approve handshake — every "add" is INSTANT MUTUAL, i.e.
+// strictly symmetric from the moment of creation. The row IS the relationship.
+
+model Connection {
+  id        String   @id @default(cuid())
+  userIdA   String
+  userIdB   String
+  createdAt DateTime @default(now())
+
+  @@unique([userIdA, userIdB])
+  @@index([userIdA])
+  @@index([userIdB])
+}

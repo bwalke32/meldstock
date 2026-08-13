@@ -1,0 +1,43 @@
+/* @polsia:user-owned — your custom global CSS: keyframes, animation classes, one-off global
+ * styles, and @import your own .css files. Prefer tw-animate-css for motion (animate-in,
+ * fade-in, slide-in-from-bottom-N, duration-*). globals.css is framework-owned — edit HERE. */
+
+/* Trading-floor — pulsing border on the freshest trade row, fading over ~15s. */
+@keyframes lot-row-fresh-pulse {
+  0% {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 0 var(--shadow-brand-color);
+  }
+  60% {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    border-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.recent-row-pulse {
+  animation: lot-row-fresh-pulse 15s ease-out forwards;
+  border-color: var(--primary);
+}
+
+/* Live dot — keep the static dot solid while the ping ring fades. */
+@keyframes live-dot-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.live-dot-ping {
+  animation: live-dot-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
