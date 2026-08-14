@@ -8,17 +8,10 @@
 // thread participant gate before streaming bytes (a CDN URL would be
 // guessable from the cuid + slug).
 //
-// The opaque URL needs a (threadId, messageId) anchor; we accept either
-// of two shapes:
-//
-//   1. STANDALONE — body-only uploader returning an opaque stub URL that
-//      the client then resolves against the actual thread message id.
-//      Stubbed shape: `attachmentToken` — the client can apply it to a
-//      message via the legacy `attachmentUrl` field. When the lot's
-//      billing moves to attachments-only, the client will re-upload
-//      against a thread anchor. For the audit-and-fix brief we keep
-//      the existing wire shape (`url` returned) but stamp the opaque
-//      relative path on the wire instead of the raw CDN URL.
+// The response contains a server-issued encrypted attachment token. The
+// message endpoint verifies its uploader and persists the opaque token in
+// the legacy attachmentUrl column; clients never submit or receive the raw
+// upstream storage URL.
 //
 // Rate-limit (G4): per-user upload preset. Audit on 429 so spikes are
 // observable.
@@ -27,6 +20,10 @@ import FormDataNode from 'form-data';
 import { NextResponse } from 'next/server';
 import { AttachmentUploadResponse } from '@/lib/contracts/messaging';
 import { requireAuth } from '@/lib/require-auth';
+import {
+  AttachmentConfigurationError,
+  issueAttachmentToken,
+} from '@/lib/security/attachment-token';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
 
@@ -92,38 +89,57 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = (file as File).name ?? 'upload';
+  if (filename.length > 255) {
+    return NextResponse.json({ error: 'Filename is too long' }, { status: 400 });
+  }
 
   const uploadForm = new FormDataNode();
   uploadForm.append('file', buffer, { filename, contentType: file.type });
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
-  const r2Res = await nodeFetch('https://polsia.com/api/proxy/r2/upload', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.POLSIA_API_KEY}`,
-      ...uploadForm.getHeaders(),
-    },
-    body: uploadForm,
-  });
-
-  const r2Json = (await r2Res.json()) as {
-    success: boolean;
-    file?: { url: string; filename: string; mime_type: string };
-    error?: { message: string };
-  };
-  if (!r2Json.success || !r2Json.file) {
-    return NextResponse.json({ error: r2Json.error?.message ?? 'Upload failed' }, { status: 502 });
+  if (!process.env.POLSIA_API_KEY) {
+    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 503 });
   }
 
-  // The wire shape now carries a stable handle the thread message POST
-  // resolves to a real (threadId, messageId) download URL on
-  // attachment-to-message binding. The bare shape we emit here is no
-  // longer guessable — it MUST be re-bound via the thread messages POST.
-  const wire = AttachmentUploadResponse.parse({
-    url: r2Json.file.url,
-    filename: r2Json.file.filename,
-    mimeType: r2Json.file.mime_type,
-  });
-  return NextResponse.json(wire, { status: 201 });
+  let r2Res: Awaited<ReturnType<typeof nodeFetch>>;
+  try {
+    r2Res = await nodeFetch('https://polsia.com/api/proxy/r2/upload', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.POLSIA_API_KEY}`,
+        ...uploadForm.getHeaders(),
+      },
+      body: uploadForm,
+    });
+  } catch {
+    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 502 });
+  }
+
+  const r2Json = (await r2Res.json().catch(() => null)) as {
+    success: boolean;
+    file?: { url: string; filename: string; mime_type: string };
+  } | null;
+  if (!r2Json?.success || !r2Json.file) {
+    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 502 });
+  }
+
+  // The raw provider URL is sealed into an authenticated token and never
+  // crosses the client trust boundary as a directly fetchable value.
+  try {
+    const wire = AttachmentUploadResponse.parse({
+      token: issueAttachmentToken({
+        upstreamUrl: r2Json.file.url,
+        uploadedBy: userId,
+        filename: r2Json.file.filename,
+        mimeType: r2Json.file.mime_type,
+      }),
+      filename: r2Json.file.filename,
+      mimeType: r2Json.file.mime_type,
+    });
+    return NextResponse.json(wire, { status: 201 });
+  } catch (error) {
+    const status = error instanceof AttachmentConfigurationError ? 503 : 502;
+    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status });
+  }
 }

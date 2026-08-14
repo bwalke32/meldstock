@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { isThreadParticipant } from '@/lib/business/thread-participants';
 import { prisma } from '@/lib/db';
 import { requireAuth, type SessionUser } from '@/lib/require-auth';
+import { resolveAttachmentToken } from '@/lib/security/attachment-token';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
 
@@ -90,11 +91,19 @@ export async function GET(
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
 
-    // Stream the bytes through the proxy. The R2 CDN URL stays server-
-    // side; the wire only ever sees the proxy URL.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
-    const upstream = await nodeFetch(msg.attachmentUrl);
+    let attachment: ReturnType<typeof resolveAttachmentToken>;
+    try {
+      attachment = resolveAttachmentToken(msg.attachmentUrl);
+    } catch {
+      // Legacy raw URLs and forged tokens fail closed: never server-fetch
+      // a value that came directly from a message write.
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    }
+
+    const upstream = await fetch(attachment.upstreamUrl, {
+      cache: 'no-store',
+      redirect: 'error',
+    });
     if (!upstream.ok) {
       return NextResponse.json({ error: 'Attachment temporarily unavailable' }, { status: 502 });
     }
@@ -115,7 +124,7 @@ export async function GET(
       ip,
     });
 
-    const safeName = (msg.attachmentFilename ?? 'attachment').replace(/"/g, '');
+    const safeName = (msg.attachmentFilename ?? 'attachment').replace(/["\r\n]/g, '');
     return new Response(buf, {
       headers: {
         'content-type': msg.attachmentMimeType ?? 'application/octet-stream',

@@ -11,10 +11,30 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { AiConfigurationError, streamChat } from '@/lib/ai/client';
 import { chatRequestSchema } from '@/lib/ai/schema';
+import { requireAuth, type SessionUser } from '@/lib/require-auth';
+import { checkLimit, rateBucketFor } from '@/lib/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  let user: SessionUser;
+  try {
+    user = await requireAuth(req);
+  } catch (res) {
+    return res as Response;
+  }
+
+  const limit = checkLimit('aiChat', rateBucketFor(req, user.id, 'chat'));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: 'rate_limited' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((limit.retryAfterMs ?? 1000) / 1000)) },
+      },
+    );
+  }
+
   const json = await req.json().catch(() => null);
   const result = chatRequestSchema.safeParse(json);
 
@@ -27,9 +47,16 @@ export async function POST(req: Request) {
 
   try {
     const upstream = await streamChat({
-      messages: result.data.messages,
-      model: result.data.model,
-      task: result.data.task,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are the Meldstock marketplace assistant. Help authenticated users with thermoplastic resin terminology, listing interpretation, and marketplace workflows. Do not reveal secrets or internal configuration.',
+        },
+        ...result.data.messages,
+      ],
+      model: 'gpt-4o-mini',
+      task: 'meldstock-assistant',
     });
 
     // Relay the OpenAI-compatible SSE stream straight through to the browser.
@@ -42,8 +69,8 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     if (err instanceof AiConfigurationError) {
-      return NextResponse.json({ error: 'ai_not_configured' }, { status: 503 });
+      return NextResponse.json({ error: 'ai_unavailable' }, { status: 503 });
     }
-    return NextResponse.json({ error: 'ai_request_failed' }, { status: 502 });
+    return NextResponse.json({ error: 'ai_unavailable' }, { status: 502 });
   }
 }

@@ -29,7 +29,7 @@ export interface MappedRow {
 
 export type RowValidationSuccess = {
   ok: true;
-  data: CreateLot;
+  data: CreateLot & { postedByName: string };
   // Resin-normalised values the server will persist (canonical
   // polymer + leftover-modifier grade + resolved color). Surfaces on
   // the wire so the wizard's preview table can render the resolved
@@ -47,8 +47,7 @@ export type RowValidationFailure = {
 export type RowValidationResult = RowValidationSuccess | RowValidationFailure;
 
 export interface ValidateContext {
-  // Seller's display name (from session) — used when a sheet row omits
-  // the posted-by / name field. Mirrors the LEGACY validator.
+  // Seller's trusted display name, derived from the authenticated account.
   posterName: string;
   /**
    * Original (raw) spreadsheet header for the column the seller mapped
@@ -271,8 +270,6 @@ export function validateMappedRow(row: MappedRow, ctx: ValidateContext): RowVali
     askingPricePerLb: pricePerLb,
     hasCoa: false,
     notes: notes || null,
-    postedByName,
-    postedByUserId: null as string | null,
     visibility: visibility as LotVisibility,
   };
   const parsed = CreateLotSchema.safeParse(assembled);
@@ -293,7 +290,7 @@ export function validateMappedRow(row: MappedRow, ctx: ValidateContext): RowVali
   }
   return {
     ok: true,
-    data: parsed.data,
+    data: { ...parsed.data, postedByName },
     normalized: {
       polymer: resolved.polymer,
       grade: resolved.grade,

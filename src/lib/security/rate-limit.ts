@@ -39,6 +39,8 @@ export const RATE_PRESETS = {
   userMutation: { capacity: 30, refillPerSec: 30 / 60 } as LimitConfig,
   // Per-user uploads (attachments + document uploads).
   upload: { capacity: 10, refillPerSec: 10 / 60 } as LimitConfig,
+  // Per-user metered AI relay calls.
+  aiChat: { capacity: 8, refillPerSec: 8 / 60 } as LimitConfig,
   // Per-user list reads.
   listRead: { capacity: 60, refillPerSec: 60 / 60 } as LimitConfig,
   // Per-user anonymised-fan-out (notifications GET / inbox refresh).

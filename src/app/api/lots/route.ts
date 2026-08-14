@@ -13,10 +13,10 @@
 //       rule set lives in @/lib/business/lot-visibility so every API route
 //       answers the same question. ANONYMOUS lots scrub the seller identity
 //       (postedByName → "Meldstock-verified seller", postedByUserId/Handle → null).
-// POST: persist a new listing (HAVE or WANTED). When a better-auth session is
-//       present, the lot is owner-linked via `postedByUserId` so the seller
-//       profile link lights up; anonymous posts stay anonymous, preserving
-//       the legacy demo behaviour. `visibility` defaults to PUBLIC at the
+// POST: persist a new listing (HAVE or WANTED). A better-auth session is
+//       required and ownership/display identity are derived server-side.
+//       ANONYMOUS remains a viewer-facing visibility mode, not an ownerless
+//       write. `visibility` defaults to PUBLIC at the
 //       zod layer so legacy clients stay valid. When `visibility ===
 //       'SELECTED_COMPANIES'`, `selectedCompanyIdentifiers` is required and
 //       persisted as `Json` on the lot; otherwise the column is `null`.
@@ -37,9 +37,7 @@
 //       lot) pair can be emailed at most once per 24h window, so any future
 //       re-fan-out path (cron / retry) ships clean.
 import 'server-only';
-import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { activeFilterCount, lotMatchesSavedSearch } from '@/lib/business/lot-filters';
 import {
   ANONYMOUS_SCRUB,
@@ -51,6 +49,7 @@ import {
   stampNotification,
   tryClaimNotification,
 } from '@/lib/business/notifications';
+import { getTrustedPostingIdentity } from '@/lib/business/posting-identity';
 import { asStringArray, type LotRow, lotRowToWire } from '@/lib/business/profiles';
 import { normalizeResinInput, resolveResinRow } from '@/lib/business/resin-normalize';
 import { CreateLot, LotItem, LotList } from '@/lib/contracts/lots';
@@ -58,6 +57,7 @@ import { LotFilter, lotFilterToParams, parseLotFilter } from '@/lib/contracts/lo
 import { prisma } from '@/lib/db';
 import { sendEmail } from '@/lib/email/send';
 import { wantedSavedSearchMatchEmail } from '@/lib/email/templates';
+import { getSessionUser, requireAuth, type SessionUser } from '@/lib/require-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -210,8 +210,7 @@ export async function GET(req: Request) {
       where.location = { contains: filter.location, mode: 'insensitive' };
     }
 
-    const session = await auth.api.getSession({ headers: await headers() });
-    const viewerUserId = session?.user?.id ?? null;
+    const viewerUserId = (await getSessionUser())?.id ?? null;
     // Lifecycle filter — non-owning viewers see ONLY ACTIVE rows. The
     // poster (owner) sees their own rows in every status so the dashboard
     // can render "sold" / "expired" / "deactivated" badges. We apply the
@@ -265,6 +264,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  let user: SessionUser;
+  try {
+    user = await requireAuth(req);
+  } catch (res) {
+    return res as Response;
+  }
+
   try {
     const parsed = CreateLot.safeParse(await req.json());
     if (!parsed.success) {
@@ -276,8 +282,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ errors }, { status: 400 });
     }
     const data = parsed.data;
-    const session = await auth.api.getSession({ headers: await headers() });
-    const postedByUserId = data.postedByUserId ?? session?.user?.id ?? null;
+    const postingIdentity = await getTrustedPostingIdentity(user);
+    const postedByUserId = postingIdentity.userId;
     // Normalise the selected-company list — lowercase + trim + dedupe at
     // the API boundary so the read-side match is consistent regardless of
     // how a poster typed each entry. Persist ONLY when the visibility tier
@@ -327,7 +333,7 @@ export async function POST(req: Request) {
         askingPricePerLb: data.askingPricePerLb ?? null,
         hasCoa: data.hasCoa,
         notes: data.notes ?? null,
-        postedByName: data.postedByName,
+        postedByName: postingIdentity.displayName,
         postedByUserId,
         visibility: data.visibility,
         quantityRemaining,
@@ -338,13 +344,7 @@ export async function POST(req: Request) {
     // thread, so the poster's identity is hidden on the response wire
     // (matches the GET scrub) — even on the just-created response so the
     // form's success card doesn't accidentally print the seller's real name.
-    const profile =
-      postedByUserId && created.visibility !== 'ANONYMOUS'
-        ? await prisma.profile.findUnique({
-            where: { userId: postedByUserId },
-            select: { userId: true, handle: true, verificationStatus: true },
-          })
-        : null;
+    const profile = created.visibility !== 'ANONYMOUS' ? postingIdentity.profile : null;
     const scrubbed =
       created.visibility === 'ANONYMOUS'
         ? { ...created, ...ANONYMOUS_SCRUB, profile: null }

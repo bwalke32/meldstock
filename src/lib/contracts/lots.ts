@@ -108,10 +108,6 @@ export const CreateLot = z
       .nullable(),
     hasCoa: z.boolean().default(false),
     notes: z.string().max(1500).optional().nullable(),
-    postedByName: z.string().min(1, 'Your name is required').max(80),
-    // Plain-scalar FK to User.id (set by the post-a-lot form when a session
-    // exists). Null on anonymous posts so redploys + legacy rows stay valid.
-    postedByUserId: z.string().nullable().optional(),
     // Per-listing visibility — defaults to PUBLIC so legacy clients keep
     // posting as before; newer clients (the visibility selector) send one of
     // the five `LotVisibilityEnum` values.
@@ -125,6 +121,10 @@ export const CreateLot = z
       .optional()
       .nullable(),
   })
+  // Ownership and display identity are intentionally absent from this
+  // client write contract. Strict mode rejects legacy/malicious identity
+  // fields instead of silently stripping them.
+  .strict()
   .superRefine((value, ctx) => {
     if (
       value.visibility === 'SELECTED_COMPANIES' &&

@@ -164,7 +164,10 @@ export async function POST(req: Request) {
   return NextResponse.json(wire, { status: 200 });
 }
 
-function pickCreateArgs(data: import('@/lib/contracts/lots').CreateLot, postedByUserId: string) {
+function pickCreateArgs(
+  data: import('@/lib/contracts/lots').CreateLot & { postedByName: string },
+  postedByUserId: string,
+) {
   return {
     type: data.type,
     polymer: data.polymer,

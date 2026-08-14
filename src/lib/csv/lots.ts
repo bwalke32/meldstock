@@ -6,7 +6,7 @@
 // Documented column convention:
 //   Required: lot_type, polymer, condition, grade, qty_kg, price_usd_per_kg,
 //             country, color, form, packaging
-//   Optional: visibility, manufacturer, location, notes, posted_by_name
+//   Optional: visibility, manufacturer, location, notes
 // The validator fills postedByName from session.user.name when the column is
 // absent so the brief's required-columns list can stay short.
 
@@ -31,7 +31,6 @@ export const LOT_CSV_OPTIONAL_COLUMNS = [
   'manufacturer',
   'location',
   'notes',
-  'posted_by_name',
 ] as const;
 
 export const LOT_CSV_ALL_COLUMNS = [...LOT_CSV_REQUIRED_COLUMNS, ...LOT_CSV_OPTIONAL_COLUMNS];
@@ -127,20 +126,24 @@ export function parseLotsCsv(text: string): ParsedLotsCsv {
 export type HeaderValidationFailure = {
   ok: false;
   missing: string[];
+  forbidden: string[];
 };
 
-// Returns ok=false if the header row is missing any REQUIRED column. Unknown
-// extra columns (a "comments" column from an Excel export) are allowed and
+// Returns ok=false if the header row is missing a required column or attempts
+// to supply ownership/identity. Other unknown columns are allowed and
 // silently ignored — the loader fills in what it needs and skips the rest.
 export function validateCsvHeaders(
   headers: string[],
 ): { ok: true; missing: never[] } | HeaderValidationFailure {
   const normalised = headers.map((h) => h.toLowerCase());
+  const forbidden = normalised.filter((header) =>
+    ['posted_by_name', 'posted_by_user_id', 'postedbyname', 'postedbyuserid'].includes(header),
+  );
   const missing: string[] = [];
   for (const req of LOT_CSV_REQUIRED_COLUMNS) {
     if (!normalised.includes(req)) missing.push(req);
   }
-  if (missing.length > 0) return { ok: false, missing };
+  if (missing.length > 0 || forbidden.length > 0) return { ok: false, missing, forbidden };
   return { ok: true, missing: [] };
 }
 
@@ -149,15 +152,15 @@ export interface SessionContext {
 }
 
 export type RowValidationResult =
-  | { ok: true; data: ReturnType<typeof CreateLot.parse> }
+  | { ok: true; data: ReturnType<typeof CreateLot.parse> & { postedByName: string } }
   | { ok: false; error: string };
 
 // Validates one CSV row against the shared `CreateLot` zod contract.
 // Converts units (kg → lb), normalises categorical columns, trims text, and
 // returns the parser-ready object on success. On failure returns an
 // `{ column: message }`-shaped error so the seller can locate the problem in
-// the source CSV. `postedByName` falls back to the session user's name when
-// the row omits the optional `posted_by_name` column.
+// the source CSV. Posting identity always comes from the authenticated
+// session context and is never accepted from a CSV column.
 export function validateAndMapLotRow(raw: LotCsvRow, session: SessionContext): RowValidationResult {
   const get = (key: string): string => {
     const v = raw[key];
@@ -267,9 +270,7 @@ export function validateAndMapLotRow(raw: LotCsvRow, session: SessionContext): R
   const notes = get('notes');
   if (notes.length > 1500) return err('notes', 'must be 1500 characters or fewer');
 
-  const postedByName = get('posted_by_name') || session.name;
-  if (postedByName.length === 0) return err('posted_by_name', 'is required');
-  if (postedByName.length > 80) return err('posted_by_name', 'must be 80 characters or fewer');
+  const postedByName = session.name.trim() || 'Meldstock member';
 
   const parsed = CreateLot.safeParse({
     type: lotType,
@@ -286,8 +287,6 @@ export function validateAndMapLotRow(raw: LotCsvRow, session: SessionContext): R
     askingPricePerLb,
     hasCoa: false,
     notes: notes || null,
-    postedByName,
-    postedByUserId: null,
     visibility,
   });
   if (!parsed.success) {
@@ -295,7 +294,7 @@ export function validateAndMapLotRow(raw: LotCsvRow, session: SessionContext): R
     const column = firstIssue?.path?.join('.') ?? 'row';
     return err(column, firstIssue?.message ?? 'row did not match the lot schema');
   }
-  return { ok: true, data: parsed.data };
+  return { ok: true, data: { ...parsed.data, postedByName } };
 }
 
 function err(column: string, message: string): { ok: false; error: string } {

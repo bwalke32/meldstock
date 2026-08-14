@@ -114,7 +114,6 @@ type LotFormValues = {
   // documents collection. The schema still has `hasCoa: default(false)` and
   // we send the (server-derived) result of the upload sequence below.
   notes: string;
-  postedByName: string;
   visibility: LotVisibility;
   selectedCompanyIdentifiers: string[];
 } & FieldValues;
@@ -133,7 +132,6 @@ const DEFAULT_VALUES: LotFormValues = {
   country: '',
   askingPricePerLb: undefined,
   notes: '',
-  postedByName: '',
   visibility: 'PUBLIC',
   selectedCompanyIdentifiers: [],
 };
@@ -272,7 +270,6 @@ export function PostALotForm({ onCreated, compact = false }: PostALotFormProps) 
         // callers), but this client always lets it default to false and
         // the upload sequence flips it server-side on first success.
         notes: values.notes.trim() ? values.notes : undefined,
-        postedByName: values.postedByName,
         visibility: values.visibility,
         // Send the chips ONLY when the tier is SELECTED_COMPANIES so the
         // server can stamp null otherwise — keeps the wire stable across
@@ -714,28 +711,6 @@ export function PostALotForm({ onCreated, compact = false }: PostALotFormProps) 
                 />
               </FormControl>
               <FormDescription>Up to 1500 characters.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="postedByName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Your name / company</FormLabel>
-              <FormControl>
-                <Input
-                  className="h-11"
-                  placeholder="Acme Polymers · Broker desk"
-                  autoComplete="off"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Shown on the lot — no public profile required at this stage.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

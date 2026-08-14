@@ -7,16 +7,27 @@
 
 import { z } from 'zod';
 
-export const chatMessageSchema = z.object({
-  role: z.enum(['system', 'user', 'assistant']),
-  content: z.string().min(1),
-});
+export const chatMessageSchema = z
+  .object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(4000),
+  })
+  .strict();
 
-export const chatRequestSchema = z.object({
-  messages: z.array(chatMessageSchema).min(1).max(50),
-  model: z.string().min(1).optional(),
-  task: z.string().min(1).optional(),
-});
+export const chatRequestSchema = z
+  .object({
+    messages: z.array(chatMessageSchema).min(1).max(20),
+    model: z.literal('gpt-4o-mini').optional(),
+    task: z.literal('meldstock-assistant').optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.messages.reduce((sum, message) => sum + message.content.length, 0) <= 20_000,
+    {
+      message: 'Conversation is too large',
+      path: ['messages'],
+    },
+  );
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type ChatRequest = z.infer<typeof chatRequestSchema>;

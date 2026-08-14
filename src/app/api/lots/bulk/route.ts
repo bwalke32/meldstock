@@ -12,7 +12,6 @@
 // throws on non-2xx). Body cap: 1 MB. Row cap: 500.
 import 'server-only';
 import { NextResponse } from 'next/server';
-import type { CreateLot as CreateLotInput } from '@/lib/contracts/lots';
 import { BulkLotsResponse } from '@/lib/contracts/lots-bulk';
 import { parseLotsCsv, validateAndMapLotRow, validateCsvHeaders } from '@/lib/csv/lots';
 import { prisma } from '@/lib/db';
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
     const user = await requireAuth();
     userId = user.id;
     // Pull the user's display name once so the row-level validator can
-    // default `posted_by_name` for any row that omits the optional column.
+    // stamp a trusted posting name from the authenticated account.
     const userRow = await prisma.user.findUnique({
       where: { id: userId },
       select: { name: true },
@@ -73,6 +72,12 @@ export async function POST(req: Request) {
   }
   const headerCheck = validateCsvHeaders(parsed.headers);
   if (!headerCheck.ok) {
+    if (headerCheck.forbidden.length > 0) {
+      return NextResponse.json(
+        { error: 'CSV ownership and posting identity columns are not accepted' },
+        { status: 400 },
+      );
+    }
     return NextResponse.json(
       { error: `CSV is missing required column(s): ${headerCheck.missing.join(', ')}` },
       { status: 400 },
@@ -93,7 +98,10 @@ export async function POST(req: Request) {
   // the per-row index around so the response table mirrors the source
   // spreadsheet.
   const results: BulkResultEntry[] = [];
-  const validRows: Array<{ rowIndex: number; data: CreateLotInput }> = [];
+  const validRows: Array<{
+    rowIndex: number;
+    data: import('@/lib/contracts/lots').CreateLot & { postedByName: string };
+  }> = [];
 
   // `for..of` so the row variable isn't widened to `LotCsvRow | undefined`
   // under noUncheckedIndexedAccess — TS still gets the right element type.

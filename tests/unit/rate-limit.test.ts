@@ -50,6 +50,14 @@ describe('rate-limit token bucket', () => {
     expect(claim.retryAfterMs).toBeGreaterThan(0);
   });
 
+  it('enforces the dedicated per-user AI burst allowance', async () => {
+    const { checkLimit, RATE_PRESETS } = await loadRateLimit();
+    const bucket = `bucket-ai-${Math.random()}`;
+    const results = drain(checkLimit, 'aiChat', bucket, RATE_PRESETS.aiChat.capacity + 1, NOW);
+    expect(results.slice(0, RATE_PRESETS.aiChat.capacity).every(Boolean)).toBe(true);
+    expect(results[RATE_PRESETS.aiChat.capacity]).toBe(false);
+  });
+
   it('refills after the refill window elapses (next request allowed)', async () => {
     const { checkLimit, RATE_PRESETS } = await loadRateLimit();
     const cfg = RATE_PRESETS.upload;

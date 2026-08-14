@@ -193,12 +193,12 @@ export type ThreadListResponse = z.infer<typeof ThreadList>;
 // --- Write shapes --------------------------------------------------------
 // `threadId` comes from the URL, `senderId` from the session — NEVER trust
 // either as a body field.
-export const CreateMessage = z.object({
-  body: z.string().min(1, "Message can't be empty").max(2000),
-  attachmentUrl: z.string().url().optional(),
-  attachmentFilename: z.string().max(255).optional(),
-  attachmentMimeType: z.string().max(128).optional(),
-});
+export const CreateMessage = z
+  .object({
+    body: z.string().min(1, "Message can't be empty").max(2000),
+    attachmentToken: z.string().startsWith('msa1.').max(4096).optional(),
+  })
+  .strict();
 export type CreateMessage = z.infer<typeof CreateMessage>;
 
 export const CreateThread = z.object({
@@ -293,7 +293,7 @@ export type MessageList = z.infer<typeof MessageList>;
 
 // --- Attachment upload response -----------------------------------------
 export const AttachmentUploadResponse = z.object({
-  url: z.string(),
+  token: z.string().startsWith('msa1.'),
   filename: z.string(),
   mimeType: z.string(),
 });

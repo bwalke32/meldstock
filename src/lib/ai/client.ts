@@ -25,7 +25,10 @@ const DEFAULT_VISION_MODEL = 'gpt-4o';
 type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
-export type LlmMessage = ChatMessage | { role: ChatMessage['role']; content: ContentPart[] };
+export type LlmMessage =
+  | ChatMessage
+  | { role: 'system'; content: string | ContentPart[] }
+  | { role: ChatMessage['role']; content: ContentPart[] };
 
 export interface ChatOptions {
   messages: LlmMessage[];

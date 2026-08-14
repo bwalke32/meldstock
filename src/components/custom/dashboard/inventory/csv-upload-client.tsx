@@ -235,10 +235,7 @@ function ColumnConventionCard() {
               <span className="font-mono text-foreground">my_network</span>,{' '}
               <span className="font-mono text-foreground">anonymous</span>.
             </p>
-            <p>
-              <span className="font-mono text-foreground">posted_by_name</span> — falls back to your
-              account name when omitted.
-            </p>
+            <p>Your posting identity is always taken from your signed-in account.</p>
             <p>
               <span className="font-mono text-foreground">selected_companies</span> — cannot be
               expressed per bulk row (needs a recipient list); create that listing via the
@@ -275,9 +272,6 @@ function ConventionList({
         {columns.map((col) => (
           <li key={col} className="flex items-center justify-between gap-2">
             <span>{col}</span>
-            {col === 'posted_by_name' ? (
-              <span className="text-caption text-muted-foreground">optional fallback</span>
-            ) : null}
           </li>
         ))}
       </ul>

@@ -279,7 +279,7 @@ function ThreadReady({
       senderId: currentUserId,
       body,
       createdAt: new Date().toISOString(),
-      attachmentUrl: attachment?.url ?? null,
+      attachmentUrl: null,
       attachmentFilename: attachment?.filename ?? null,
       attachmentMimeType: attachment?.mimeType ?? null,
     };
@@ -291,9 +291,7 @@ function ThreadReady({
           method: 'POST',
           body: JSON.stringify({
             body,
-            attachmentUrl: attachment?.url,
-            attachmentFilename: attachment?.filename,
-            attachmentMimeType: attachment?.mimeType,
+            attachmentToken: attachment?.token,
           }),
           schema: MessageItemSchema,
         },

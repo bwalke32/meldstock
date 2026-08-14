@@ -35,6 +35,7 @@ import { prisma } from '@/lib/db';
 import { sendEmail } from '@/lib/email/send';
 import { rfqReplyEmail, threadMessageEmail } from '@/lib/email/templates';
 import { requireAuth, type SessionUser } from '@/lib/require-auth';
+import { resolveAttachmentToken } from '@/lib/security/attachment-token';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
 
@@ -83,9 +84,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ threadId: stri
   }
 
   let body: string;
-  let attachmentUrl: string | undefined;
-  let attachmentFilename: string | undefined;
-  let attachmentMimeType: string | undefined;
+  let attachmentToken: string | undefined;
   try {
     const parsed = CreateMessage.safeParse(await req.json());
     if (!parsed.success) {
@@ -97,9 +96,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ threadId: stri
       return NextResponse.json({ errors }, { status: 400 });
     }
     body = parsed.data.body;
-    attachmentUrl = parsed.data.attachmentUrl;
-    attachmentFilename = parsed.data.attachmentFilename;
-    attachmentMimeType = parsed.data.attachmentMimeType;
+    attachmentToken = parsed.data.attachmentToken;
   } catch {
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
@@ -114,15 +111,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ threadId: stri
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    let attachment: { token: string; filename: string; mimeType: string } | undefined;
+    if (attachmentToken) {
+      try {
+        const resolved = resolveAttachmentToken(attachmentToken, {
+          expectedUploadedBy: user.id,
+          maxAgeMs: 60 * 60 * 1000,
+        });
+        attachment = {
+          token: attachmentToken,
+          filename: resolved.filename,
+          mimeType: resolved.mimeType,
+        };
+      } catch {
+        return NextResponse.json({ error: 'Invalid attachment reference' }, { status: 400 });
+      }
+    }
+
     const created = await prisma.$transaction(async (tx) => {
       const msg = await tx.message.create({
         data: {
           threadId: thread.id,
           senderId: user.id,
           body,
-          attachmentUrl,
-          attachmentFilename,
-          attachmentMimeType,
+          attachmentUrl: attachment?.token,
+          attachmentFilename: attachment?.filename,
+          attachmentMimeType: attachment?.mimeType,
         },
       });
       await tx.messageThread.update({
