@@ -88,6 +88,12 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
+    if (user.id !== thread.buyerId && user.id !== thread.sellerId) {
+      return NextResponse.json(
+        { error: 'Only the buyer or seller can rate this deal.' },
+        { status: 403 },
+      );
+    }
 
     // ratee = the OTHER thread participant. Caller validation is the set
     // membership, not a supplied id — keeps self-rating structurally

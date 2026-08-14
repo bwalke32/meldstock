@@ -484,23 +484,10 @@ async function fanOutSavedSearchMatches(
     if (visibility === 'VERIFIED_COMPANIES_ONLY') {
       recipientUserIds = recipientUserIds.filter((id) => verifiedUserIds.has(id));
     } else if (visibility === 'MY_NETWORK') {
-      if (!postedByUserId) {
-        return;
-      }
-      // Identical to the resolver-gate — only viewers whose Connection row
-      // pairs them with the poster (in either direction) get notified.
-      const pairs = await prisma.connection.findMany({
-        where: {
-          OR: [{ userIdA: postedByUserId }, { userIdB: postedByUserId }],
-        },
-        select: { userIdA: true, userIdB: true },
-      });
-      const networkSet = new Set<string>([postedByUserId]);
-      for (const pair of pairs) {
-        networkSet.add(pair.userIdA);
-        networkSet.add(pair.userIdB);
-      }
-      recipientUserIds = recipientUserIds.filter((id) => networkSet.has(id));
+      // No Connection row currently proves acceptance by both parties.
+      // Match the read gate's temporary fail-closed posture and send no
+      // private-listing notifications until request/accept state exists.
+      return;
     } else {
       // SELECTED_COMPANIES — match by profile handle OR auth user email.
       const identifierSet = new Set(

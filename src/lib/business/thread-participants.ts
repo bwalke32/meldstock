@@ -17,7 +17,32 @@ type ThreadLike = {
   buyerId: string | null;
   sellerId: string | null;
   createdAt: Date;
+  kind?: 'LISTING' | 'RFQ' | 'BROKER_GROUP';
+  createdById?: string | null;
 };
+
+function participantIsAuthorized(
+  thread: ThreadLike,
+  participant: { userId: string; addedBy: string | null },
+): boolean {
+  if (participant.userId === thread.buyerId || participant.userId === thread.sellerId) {
+    return true;
+  }
+  if (thread.buyerId !== null && thread.sellerId !== null) {
+    return participant.addedBy === thread.sellerId;
+  }
+  if (thread.kind === 'BROKER_GROUP' && thread.createdById) {
+    return participant.userId === thread.createdById || participant.addedBy === thread.createdById;
+  }
+  return false;
+}
+
+export function canAddThreadParticipant(thread: ThreadLike, userId: string): boolean {
+  if (thread.buyerId !== null && thread.sellerId !== null) {
+    return thread.sellerId === userId;
+  }
+  return thread.kind === 'BROKER_GROUP' && thread.createdById === userId;
+}
 
 // First-read backfill: a LISTING or RFQ thread MUST have rows for buyer +
 // seller in the participant table before any access check. Broker-group
@@ -62,9 +87,9 @@ export async function isThreadParticipant(thread: ThreadLike, userId: string): P
   await ensureParticipantRoster(thread);
   const found = await prisma.threadParticipant.findUnique({
     where: { threadId_userId: { threadId: thread.id, userId } },
-    select: { threadId: true },
+    select: { userId: true, addedBy: true },
   });
-  return found !== null;
+  return found !== null && participantIsAuthorized(thread, found);
 }
 
 type RosterRow = {
@@ -94,13 +119,14 @@ export async function loadParticipants(thread: ThreadLike): Promise<ParticipantI
     select: { userId: true, addedAt: true, addedBy: true },
     orderBy: { addedAt: 'asc' },
   });
-  if (rows.length === 0) {
+  const authorizedRows = rows.filter((row) => participantIsAuthorized(thread, row));
+  if (authorizedRows.length === 0) {
     return [];
   }
 
-  const ids = Array.from(new Set(rows.map((r) => r.userId)));
+  const ids = Array.from(new Set(authorizedRows.map((r) => r.userId)));
   const addedByIds = Array.from(
-    new Set(rows.map((r) => r.addedBy).filter((v): v is string => v !== null)),
+    new Set(authorizedRows.map((r) => r.addedBy).filter((v): v is string => v !== null)),
   );
   const lookupIds = Array.from(new Set([...ids, ...addedByIds]));
 
@@ -110,7 +136,7 @@ export async function loadParticipants(thread: ThreadLike): Promise<ParticipantI
   });
   const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
 
-  return rows.map((r) => {
+  return authorizedRows.map((r) => {
     const profile = profileByUser.get(r.userId);
     return {
       userId: r.userId,
@@ -132,14 +158,15 @@ export async function countParticipants(
   currentUserId: string,
 ): Promise<{ count: number; isParticipant: boolean }> {
   await ensureParticipantRoster(thread);
-  const [count, mine] = await Promise.all([
-    prisma.threadParticipant.count({ where: { threadId: thread.id } }),
-    prisma.threadParticipant.findUnique({
-      where: { threadId_userId: { threadId: thread.id, userId: currentUserId } },
-      select: { threadId: true },
-    }),
-  ]);
-  return { count, isParticipant: mine !== null };
+  const rows = await prisma.threadParticipant.findMany({
+    where: { threadId: thread.id },
+    select: { userId: true, addedBy: true },
+  });
+  const authorized = rows.filter((row) => participantIsAuthorized(thread, row));
+  return {
+    count: authorized.length,
+    isParticipant: authorized.some((row) => row.userId === currentUserId),
+  };
 }
 
 // Used by /api/threads/[id]/participants POST. Returns the resolved

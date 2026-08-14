@@ -51,6 +51,38 @@ export function anonymityFor(
  * sitting one click away.
  */
 export const ANONYMOUS_THREAD_SENDER = 'the seller';
+export const ANONYMOUS_THREAD_SELLER_ID = 'anonymous-seller';
+
+export function hidesAnonymousSeller(
+  lot: { visibility: string | null; postedByUserId: string | null } | null,
+  viewerUserId: string,
+): boolean {
+  return (
+    lot?.visibility === 'ANONYMOUS' &&
+    lot.postedByUserId !== null &&
+    lot.postedByUserId !== viewerUserId
+  );
+}
+
+export function maskedAnonymousSenderId(
+  senderId: string,
+  sellerId: string | null,
+  hideSeller: boolean,
+): string {
+  return hideSeller && sellerId !== null && senderId === sellerId
+    ? ANONYMOUS_THREAD_SELLER_ID
+    : senderId;
+}
+
+export function anonymousDocumentFilename(kind: string, id: string): string {
+  const label = kind.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'document';
+  return `${label}-${id.slice(-8)}.pdf`;
+}
+
+export function anonymousAttachmentFilename(id: string, mimeType: string | null): string {
+  const extension = mimeType === 'application/pdf' ? '.pdf' : '';
+  return `seller-attachment-${id.slice(-8)}${extension}`;
+}
 
 export function maskedSenderName(mode: AnonymityMode, realName: string | null | undefined): string {
   if (mode === 'ANONYMOUS_LOT_SIDE') return ANONYMOUS_THREAD_SENDER;

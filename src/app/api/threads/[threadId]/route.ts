@@ -13,6 +13,13 @@
 //       Otherwise 403.
 import 'server-only';
 import { NextResponse } from 'next/server';
+import {
+  ANONYMOUS_THREAD_SELLER_ID,
+  anonymousAttachmentFilename,
+  hidesAnonymousSeller,
+  maskedAnonymousSenderId,
+} from '@/lib/business/anonymity';
+import { ANONYMOUS_SCRUB } from '@/lib/business/lot-visibility';
 import { lotRowToWire, toDecimalString } from '@/lib/business/profiles';
 import { isThreadParticipant, loadParticipants } from '@/lib/business/thread-participants';
 import { attachmentDownloadUrl } from '@/lib/contracts/documents';
@@ -171,12 +178,24 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
         : null;
 
     const lastMessageRaw = messages.length > 0 ? messages[messages.length - 1] : undefined;
+    const hideSeller = hidesAnonymousSeller(lot, user.id);
+    const wireParticipants = participants.map((participant) =>
+      hideSeller && participant.userId === thread.sellerId
+        ? {
+            ...participant,
+            userId: ANONYMOUS_THREAD_SELLER_ID,
+            displayName: ANONYMOUS_SCRUB.postedByName,
+            companyName: null,
+            handle: null,
+          }
+        : participant,
+    );
 
     // For non-rooms, members is the full roster (kept as null on the wire —
     // the field is rooms-only; listing threads render otherParty + count
     // instead). For rooms it equals participants (full roster) — no top-3
     // cap here because the right pane renders the whole list.
-    const wireMembers = isRoom ? participants : null;
+    const wireMembers = isRoom ? wireParticipants : null;
     const createdByDisplayName = isRoom ? (creatorProfile?.displayName ?? null) : null;
     const createdByUserIdWire = isRoom ? (thread.createdById ?? null) : null;
     const createdByIsBrokerWire = isRoom ? creatorProfile?.role === 'BROKER_TRADER' : undefined;
@@ -189,7 +208,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
         lotId: thread.lotId,
         lotSummary,
         buyerId: thread.buyerId,
-        sellerId: thread.sellerId,
+        sellerId: hideSeller ? null : thread.sellerId,
         threadStatus: thread.status,
         completedAt: thread.completedAt?.toISOString() ?? null,
         // Stamped on every detail response so the thread island renders
@@ -203,8 +222,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
           ? undefined
           : (thread.dealStatusUpdatedAt?.toISOString() ?? null),
         canAdvance: canAdvanceDeal,
-        otherParty:
-          profile && otherUserId !== null
+        otherParty: hideSeller
+          ? {
+              userId: ANONYMOUS_THREAD_SELLER_ID,
+              displayName: ANONYMOUS_SCRUB.postedByName,
+              companyName: null,
+              handle: null,
+              counterpartyIsBroker: false,
+            }
+          : profile && otherUserId !== null
             ? {
                 userId: otherUserId,
                 displayName: profile.displayName,
@@ -220,7 +246,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
         // is by definition read for THIS viewer. Other viewers may still have
         // a different state — the flag is per-user.
         unread: false,
-        participantCount: participants.length,
+        participantCount: wireParticipants.length,
         rfq,
         members: wireMembers,
         createdByDisplayName,
@@ -230,7 +256,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
           ? {
               id: lastMessageRaw.id,
               threadId: lastMessageRaw.threadId,
-              senderId: lastMessageRaw.senderId,
+              senderId: maskedAnonymousSenderId(
+                lastMessageRaw.senderId,
+                thread.sellerId,
+                hideSeller,
+              ),
               body: lastMessageRaw.body,
               createdAt: lastMessageRaw.createdAt.toISOString(),
               // Stamped via the same `attachmentDownloadUrl` helper the
@@ -241,7 +271,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
               attachmentUrl: lastMessageRaw.attachmentUrl
                 ? attachmentDownloadUrl(thread.id, lastMessageRaw.id)
                 : null,
-              attachmentFilename: lastMessageRaw.attachmentFilename ?? null,
+              attachmentFilename:
+                hideSeller && lastMessageRaw.senderId === thread.sellerId
+                  ? anonymousAttachmentFilename(
+                      lastMessageRaw.id,
+                      lastMessageRaw.attachmentMimeType,
+                    )
+                  : (lastMessageRaw.attachmentFilename ?? null),
               attachmentMimeType: lastMessageRaw.attachmentMimeType ?? null,
             }
           : null,
@@ -249,7 +285,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
       messages: messages.map((m) => ({
         id: m.id,
         threadId: m.threadId,
-        senderId: m.senderId,
+        senderId: maskedAnonymousSenderId(m.senderId, thread.sellerId, hideSeller),
         body: m.body,
         createdAt: m.createdAt.toISOString(),
         // Same hardening as the `lastMessage` stamp above — the GET
@@ -257,10 +293,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
         // wires the opaque relative path and the download proxy
         // re-gates access on every read.
         attachmentUrl: m.attachmentUrl ? attachmentDownloadUrl(thread.id, m.id) : null,
-        attachmentFilename: m.attachmentFilename ?? null,
+        attachmentFilename:
+          hideSeller && m.senderId === thread.sellerId
+            ? anonymousAttachmentFilename(m.id, m.attachmentMimeType)
+            : (m.attachmentFilename ?? null),
         attachmentMimeType: m.attachmentMimeType ?? null,
       })),
-      participants,
+      participants: wireParticipants,
     });
     return NextResponse.json(wire);
   } catch {

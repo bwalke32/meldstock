@@ -15,7 +15,10 @@
 //        attempts return 409. Auth: requireAuth.
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { ANONYMOUS_THREAD_SELLER_ID, hidesAnonymousSeller } from '@/lib/business/anonymity';
+import { ANONYMOUS_SCRUB } from '@/lib/business/lot-visibility';
 import {
+  canAddThreadParticipant,
   isThreadParticipant,
   loadParticipants,
   resolveParticipantByIdentifier,
@@ -49,7 +52,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
   try {
     const thread = await prisma.messageThread.findUnique({
       where: { id: threadId },
-      select: { id: true, buyerId: true, sellerId: true, createdAt: true },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        createdAt: true,
+        kind: true,
+        createdById: true,
+        lotId: true,
+      },
     });
     if (!thread) {
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
@@ -59,7 +70,25 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const items = await loadParticipants(thread);
-    return NextResponse.json(ParticipantListSchema.parse({ items }));
+    const lot = thread.lotId
+      ? await prisma.lot.findUnique({
+          where: { id: thread.lotId },
+          select: { visibility: true, postedByUserId: true },
+        })
+      : null;
+    const hideSeller = hidesAnonymousSeller(lot, user.id);
+    const wireItems = items.map((item) =>
+      hideSeller && item.userId === thread.sellerId
+        ? {
+            ...item,
+            userId: ANONYMOUS_THREAD_SELLER_ID,
+            displayName: ANONYMOUS_SCRUB.postedByName,
+            companyName: null,
+            handle: null,
+          }
+        : item,
+    );
+    return NextResponse.json(ParticipantListSchema.parse({ items: wireItems }));
   } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -100,7 +129,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ threadId: stri
   try {
     const thread = await prisma.messageThread.findUnique({
       where: { id: threadId },
-      select: { id: true, buyerId: true, sellerId: true, createdAt: true },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        createdAt: true,
+        kind: true,
+        createdById: true,
+        lotId: true,
+      },
     });
     if (!thread) {
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
@@ -108,6 +145,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ threadId: stri
     const participant = await isThreadParticipant(thread, user.id);
     if (!participant) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!canAddThreadParticipant(thread, user.id)) {
+      return NextResponse.json(
+        { error: 'Only the seller or room creator can add participants.' },
+        { status: 403 },
+      );
     }
 
     // The lookup call rejects users who are already on the roster; build

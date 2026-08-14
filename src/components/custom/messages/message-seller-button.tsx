@@ -39,12 +39,6 @@ export function MessageSellerButton({
     return null;
   }
 
-  // Anonymous lot or session still resolving: no 1:1 path. The page already
-  // shows the legacy Dialog button.
-  if (!sellerUserId) {
-    return null;
-  }
-
   // Viewer IS the seller: they should manage their inbox at /messages instead.
   if (currentUserId === sellerUserId) {
     return null;
@@ -63,9 +57,7 @@ export function MessageSellerButton({
     } catch (err) {
       const status = err instanceof Error ? /\((\d{3})\)/.exec(err.message)?.[1] : undefined;
       if (status === '422') {
-        toast.error(
-          'This lot was posted anonymously — use the public thread on the listing to reach the seller.',
-        );
+        toast.error('This legacy listing cannot open a private thread.');
       } else if (status === '409') {
         toast.error('You are the seller on this lot.');
       } else {

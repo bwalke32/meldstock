@@ -58,6 +58,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ threadId: stri
     if (!participant) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+    if (user.id !== thread.buyerId && user.id !== thread.sellerId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const counterpartUserId =
       thread.buyerId !== null && thread.sellerId !== null

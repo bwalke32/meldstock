@@ -30,7 +30,6 @@ import {
   WantedChip,
 } from '@/components/custom/lot-chips';
 import { LotComparables } from '@/components/custom/lot-comparables';
-import { LotMessageThread } from '@/components/custom/lot-message-thread';
 import { LotPriceTrend } from '@/components/custom/lot-price-trend';
 import { DealStepper } from '@/components/custom/messages/DealStepper';
 import { MessageSellerButton } from '@/components/custom/messages/message-seller-button';
@@ -40,13 +39,6 @@ import { RespondToWantedButton } from '@/components/custom/rfq/RespondToWantedBu
 import { WantedResponsesSummary } from '@/components/custom/rfq/WantedResponsesSummary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { apiFetch } from '@/lib/api-client';
 import { useSession } from '@/lib/auth-client';
 import {
@@ -237,7 +229,6 @@ function LotReady({
   documents: LotDetailResponse['documents']['items'];
   dealStatusBlock: NonNullable<LotDetailResponse['dealStatusBlock']> | null;
 }) {
-  const [replyOpen, setReplyOpen] = useState(false);
   const { data: session } = useSession();
   const isAuthed = session?.user?.id !== undefined;
   const lotSummary = `${lot.polymer} · ${lot.manufacturer ?? ''} ${lot.grade ?? ''}`.trim();
@@ -249,7 +240,6 @@ function LotReady({
   const price = formatPricePerLb(lot.askingPricePerLb);
   const isHAVE = lot.type === 'HAVE';
   const isWanted = !isHAVE;
-  const replyLabel = isWanted ? 'Make an offer →' : 'Send a private message →';
 
   // Summary for the spec-sheet "Documents" row. When the lot carries no
   // Document rows (legacy lots, no upload), fall back to the boolean so
@@ -426,13 +416,11 @@ function LotReady({
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
-            {lot.postedByUserId ? (
-              <MessageSellerButton
-                lotId={lot.id}
-                sellerUserId={lot.postedByUserId}
-                postedByName={lot.postedByName}
-              />
-            ) : null}
+            <MessageSellerButton
+              lotId={lot.id}
+              sellerUserId={lot.postedByUserId}
+              postedByName={lot.postedByName}
+            />
             {isHAVE && lot.postedByUserId ? (
               <MakeOfferButton
                 lotId={lot.id}
@@ -449,14 +437,6 @@ function LotReady({
                 lotSummary={lotSummary}
               />
             ) : null}
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setReplyOpen(true)}
-              aria-haspopup="dialog"
-            >
-              {replyLabel}
-            </Button>
             {/* "View seller profile" flips to "Broker profile →" when the
                 poster is broker-attached (matches the seller line above). */}
             {lot.postedByIsBroker && lot.postedByUserId ? (
@@ -484,20 +464,6 @@ function LotReady({
       {isWanted ? <WantedResponsesSummary lotId={lot.id} isAuthed={isAuthed} /> : null}
 
       <LotComparables excludeId={lot.id} polymer={lot.polymer as Polymer} grade={lot.grade} />
-
-      <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{replyLabel.replace(' →', '')}</DialogTitle>
-            <DialogDescription>
-              {isWanted
-                ? `Counter to ${lot.postedByName} on this WANTED lot. The seller sees your message in their inbox.`
-                : `Private thread to ${lot.postedByName}. Counter-offers and sample requests only — no public identity exposure.`}
-            </DialogDescription>
-          </DialogHeader>
-          <LotMessageThread lotId={lot.id} postedByName={lot.postedByName} />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

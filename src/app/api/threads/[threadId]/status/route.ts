@@ -118,6 +118,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ threadId: str
         { status: 422 },
       );
     }
+    if (user.id !== thread.buyerId && user.id !== thread.sellerId) {
+      return NextResponse.json(
+        { error: 'Only the buyer or seller can close this deal.' },
+        { status: 403 },
+      );
+    }
     if (thread.status !== 'PENDING') {
       return NextResponse.json(
         { error: 'Deal state is already final — status cannot change.' },

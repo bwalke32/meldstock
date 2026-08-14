@@ -9,6 +9,7 @@
 // existent / wrong-thread message. Audit per access.
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { anonymousAttachmentFilename, hidesAnonymousSeller } from '@/lib/business/anonymity';
 import { isThreadParticipant } from '@/lib/business/thread-participants';
 import { prisma } from '@/lib/db';
 import { requireAuth, type SessionUser } from '@/lib/require-auth';
@@ -67,6 +68,8 @@ export async function GET(
           sellerId: true,
           createdAt: true,
           kind: true,
+          createdById: true,
+          lotId: true,
         },
       }),
       prisma.message.findUnique({
@@ -77,6 +80,7 @@ export async function GET(
           attachmentUrl: true,
           attachmentFilename: true,
           attachmentMimeType: true,
+          senderId: true,
         },
       }),
     ]);
@@ -124,7 +128,19 @@ export async function GET(
       ip,
     });
 
-    const safeName = (msg.attachmentFilename ?? 'attachment').replace(/["\r\n]/g, '');
+    const lot = thread.lotId
+      ? await prisma.lot.findUnique({
+          where: { id: thread.lotId },
+          select: { visibility: true, postedByUserId: true },
+        })
+      : null;
+    const hideSellerFilename =
+      msg.senderId === thread.sellerId && hidesAnonymousSeller(lot, user.id);
+    const safeName = (
+      hideSellerFilename
+        ? anonymousAttachmentFilename(msg.id, msg.attachmentMimeType)
+        : (msg.attachmentFilename ?? 'attachment')
+    ).replace(/["\r\n]/g, '');
     return new Response(buf, {
       headers: {
         'content-type': msg.attachmentMimeType ?? 'application/octet-stream',

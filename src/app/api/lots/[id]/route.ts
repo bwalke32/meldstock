@@ -24,6 +24,7 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
+import { anonymousDocumentFilename } from '@/lib/business/anonymity';
 import { touchLotBump } from '@/lib/business/lot-lifecycle';
 import {
   ANONYMOUS_SCRUB,
@@ -82,12 +83,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (blocked) return blocked;
 
     const isAnonymous = lot.visibility === 'ANONYMOUS';
-    const [messages, profile, documents] = await Promise.all([
-      prisma.lotMessage.findMany({
-        where: { lotId: id },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
+    const [profile, documents] = await Promise.all([
       lot.postedByUserId && !isAnonymous
         ? prisma.profile.findUnique({
             where: { userId: lot.postedByUserId },
@@ -99,16 +95,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         orderBy: { createdAt: 'asc' },
       }),
     ]);
-    const thread = messages
-      .slice()
-      .reverse()
-      .map((m) => ({
-        id: m.id,
-        lotId: m.lotId,
-        senderName: m.senderName,
-        body: m.body,
-        createdAt: m.createdAt.toISOString(),
-      }));
     const scrubbed = isAnonymous
       ? { ...lot, ...ANONYMOUS_SCRUB, profile: null }
       : { ...lot, profile };
@@ -119,7 +105,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       id: d.id,
       lotId: d.lotId,
       type: d.type,
-      filename: d.filename,
+      filename: isAnonymous ? anonymousDocumentFilename(d.type, d.id) : d.filename,
       url: documentDownloadUrl(d.lotId, d.id),
       mimeType: d.mimeType,
       createdAt: d.createdAt.toISOString(),
@@ -127,7 +113,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json(
       LotDetailResponse.parse({
         lot: lotRowToWire(scrubbed as unknown as LotRow),
-        messages: thread,
+        messages: [],
         documents: DocumentList.parse({ items: documentItems }),
       }),
     );

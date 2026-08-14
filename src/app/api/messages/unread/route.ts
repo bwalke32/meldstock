@@ -17,9 +17,10 @@
 // the very next unread poll (typically ≤15s).
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { hidesAnonymousSeller } from '@/lib/business/anonymity';
 import { conditionLabel, polymerLabel } from '@/lib/business/lots';
 import { toDecimalString } from '@/lib/business/profiles';
-import { ensureParticipantRoster } from '@/lib/business/thread-participants';
+import { ensureParticipantRoster, isThreadParticipant } from '@/lib/business/thread-participants';
 import type { LotCondition, Polymer } from '@/lib/contracts/lots';
 import { UnreadSummary } from '@/lib/contracts/messages-unread';
 import { prisma } from '@/lib/db';
@@ -37,6 +38,7 @@ type ThreadRow = {
   lastMessageAt: Date;
   rfqId: string | null;
   kind: 'LISTING' | 'RFQ' | 'BROKER_GROUP';
+  createdById: string | null;
 };
 
 type LatestByThread = {
@@ -63,7 +65,7 @@ export async function GET(_req: Request) {
       select: { threadId: true },
     });
     const threadIds = joined.map((j) => j.threadId);
-    const threads = threadIds.length
+    const candidateThreads = threadIds.length
       ? await prisma.messageThread.findMany({
           where: { id: { in: threadIds } },
           select: {
@@ -76,9 +78,17 @@ export async function GET(_req: Request) {
             lastMessageAt: true,
             rfqId: true,
             kind: true,
+            createdById: true,
           },
         })
       : [];
+    const threads = (
+      await Promise.all(
+        candidateThreads.map(async (thread) =>
+          (await isThreadParticipant(thread, user.id)) ? thread : null,
+        ),
+      )
+    ).filter((thread): thread is NonNullable<typeof thread> => thread !== null);
 
     if (threads.length === 0) {
       return NextResponse.json(UnreadSummary.parse({ unreadCount: 0, recent: [] }));
@@ -185,6 +195,8 @@ export async function GET(_req: Request) {
               grade: true,
               quantityLb: true,
               location: true,
+              visibility: true,
+              postedByUserId: true,
             },
           })
         : Promise.resolve([]),
@@ -207,9 +219,12 @@ export async function GET(_req: Request) {
         // For listing/RFQ threads: counterparty company name (fallback to
         // display name). For broker-group rooms: the room name (subject)
         // so an "unread" still identifies the specific room.
+        const hideSeller = hidesAnonymousSeller(lot ?? null, user.id);
         const otherPartyName = isRoom
           ? r.thread.subject
-          : (profile?.companyName ?? profile?.displayName ?? 'User');
+          : hideSeller
+            ? 'Meldstock-verified seller'
+            : (profile?.companyName ?? profile?.displayName ?? 'User');
         const lotTitle = isRoom
           ? 'Broker room'
           : lot

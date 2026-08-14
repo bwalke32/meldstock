@@ -18,22 +18,27 @@
 // Audit: each access stamps LOT_DOCUMENT_DOWNLOADED so a senior reviewer
 // can later answer "who accessed which document when".
 import 'server-only';
-import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { anonymousDocumentFilename } from '@/lib/business/anonymity';
 import { lotBlockedResponse, resolveVisibilityViewer } from '@/lib/business/lot-visibility';
 import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/require-auth';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; docId: string }> }) {
+  let user: Awaited<ReturnType<typeof requireAuth>>;
+  try {
+    user = await requireAuth(req);
+  } catch (res) {
+    return res as Response;
+  }
   try {
     const { id: lotId, docId } = await ctx.params;
-    const session = await auth.api.getSession({ headers: await headers() });
-    const userId = session?.user?.id ?? null;
-    const userRole = (session?.user as { role?: string } | undefined)?.role;
+    const userId = user.id;
+    const userRole = user.role;
     const ip = extractIp(req) ?? headerIp(req);
 
     // Per-lot download rate limit — caps brute-force scrapes against a
@@ -109,7 +114,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; doc
       ip,
     });
 
-    const safeName = doc.filename.replace(/"/g, '');
+    const safeName = (
+      lot.visibility === 'ANONYMOUS' ? anonymousDocumentFilename('document', doc.id) : doc.filename
+    ).replace(/["\r\n]/g, '');
     return new Response(buf, {
       headers: {
         'content-type': doc.mimeType || 'application/octet-stream',

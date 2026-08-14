@@ -22,8 +22,22 @@
 // rows for the inbox UI.
 import 'server-only';
 import { NextResponse } from 'next/server';
+import {
+  ANONYMOUS_THREAD_SELLER_ID,
+  hidesAnonymousSeller,
+  maskedAnonymousSenderId,
+} from '@/lib/business/anonymity';
+import {
+  ANONYMOUS_SCRUB,
+  lotBlockedResponse,
+  resolveVisibilityViewer,
+} from '@/lib/business/lot-visibility';
 import { lotRowToWire, toDecimalString } from '@/lib/business/profiles';
-import { ensureParticipantRoster } from '@/lib/business/thread-participants';
+import {
+  ensureParticipantRoster,
+  isThreadParticipant,
+  loadParticipants,
+} from '@/lib/business/thread-participants';
 import {
   CreateThread,
   type LotSummary,
@@ -71,7 +85,7 @@ export async function GET(_req: Request) {
       select: { threadId: true },
     });
     const threadIds = joined.map((j) => j.threadId);
-    const rows = threadIds.length
+    const candidateRows = threadIds.length
       ? await prisma.messageThread.findMany({
           where: { id: { in: threadIds } },
           orderBy: { lastMessageAt: 'desc' },
@@ -90,6 +104,13 @@ export async function GET(_req: Request) {
           },
         })
       : [];
+    const rows = (
+      await Promise.all(
+        candidateRows.map(async (row) =>
+          (await isThreadParticipant(row as unknown as ThreadRow, user.id)) ? row : null,
+        ),
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
 
     // Batch read-cursor lookup keyed by threadId so hydrateThreadRow can stamp
     // the per-thread `unread` flag in O(1) extra queries for the whole list
@@ -153,19 +174,9 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    // ANONYMOUS listings also lock contact down to the per-lot public
-    // thread — even when the poster is signed-in, their identity is hidden
-    // and the buyer's only path to them is the existing message dialog on
-    // /lots/[id]. Keeps the brief's "contact to thread only" invariant.
-    if (lot.visibility === 'ANONYMOUS') {
-      return NextResponse.json(
-        {
-          error:
-            'This listing is anonymous — use the public message thread on the lot to reach the seller.',
-        },
-        { status: 422 },
-      );
-    }
+    const viewer = await resolveVisibilityViewer(user.id);
+    const blocked = lotBlockedResponse(lot, viewer);
+    if (blocked) return blocked;
     if (lot.postedByUserId === user.id) {
       return NextResponse.json({ error: 'You are the seller on this lot.' }, { status: 409 });
     }
@@ -258,12 +269,9 @@ async function hydrateThreadRow(row: ThreadRow, currentUserId: string, cursor: D
       orderBy: { createdAt: 'desc' },
       select: { id: true, threadId: true, senderId: true, body: true, createdAt: true },
     }),
-    prisma.threadParticipant.findMany({
-      where: { threadId: row.id },
-      orderBy: { addedAt: 'asc' },
-      select: { userId: true, addedAt: true, addedBy: true },
-    }),
+    loadParticipants(row),
   ]);
+  const hideSeller = hidesAnonymousSeller(lot, currentUserId);
 
   const lotSummary: LotSummary | null = lot
     ? (() => {
@@ -315,26 +323,7 @@ async function hydrateThreadRow(row: ThreadRow, currentUserId: string, cursor: D
   // those rows. `participantCount` is the full count for both.
   let members: ParticipantItem[] | null = null;
   if (isRoom) {
-    const top = participantRows.slice(0, 3);
-    const topIds = top.map((r) => r.userId);
-    const topProfiles = topIds.length
-      ? await prisma.profile.findMany({
-          where: { userId: { in: topIds } },
-          select: { userId: true, displayName: true, companyName: true, handle: true },
-        })
-      : [];
-    const profileByUser = new Map(topProfiles.map((p) => [p.userId, p]));
-    members = top.map((r) => {
-      const p = profileByUser.get(r.userId);
-      return {
-        userId: r.userId,
-        displayName: p?.displayName ?? 'User',
-        companyName: p?.companyName ?? null,
-        handle: p?.handle ?? null,
-        addedAt: r.addedAt.toISOString(),
-        addedByDisplayName: null,
-      };
-    });
+    members = participantRows.slice(0, 3);
   }
 
   // `createdByDisplayName` only meaningful on broker-group rooms.
@@ -358,9 +347,16 @@ async function hydrateThreadRow(row: ThreadRow, currentUserId: string, cursor: D
     lotId: row.lotId,
     lotSummary,
     buyerId: row.buyerId,
-    sellerId: row.sellerId,
-    otherParty:
-      profile && otherUserId !== null
+    sellerId: hideSeller ? null : row.sellerId,
+    otherParty: hideSeller
+      ? {
+          userId: ANONYMOUS_THREAD_SELLER_ID,
+          displayName: ANONYMOUS_SCRUB.postedByName,
+          companyName: null,
+          handle: null,
+          counterpartyIsBroker: false,
+        }
+      : profile && otherUserId !== null
         ? {
             userId: otherUserId,
             displayName: profile.displayName,
@@ -385,7 +381,7 @@ async function hydrateThreadRow(row: ThreadRow, currentUserId: string, cursor: D
         : {
             id: latestMessage.id,
             threadId: latestMessage.threadId,
-            senderId: latestMessage.senderId,
+            senderId: maskedAnonymousSenderId(latestMessage.senderId, row.sellerId, hideSeller),
             body: latestMessage.body,
             createdAt: latestMessage.createdAt.toISOString(),
           },

@@ -116,10 +116,10 @@ function isLotVisibleTo(row: LotLike, viewer: VisibilityViewer): boolean {
       return viewer.verified;
     case 'MY_NETWORK': {
       if (!viewer.userId) return false;
-      // The poster sees their own private row.
-      if (row.postedByUserId === viewer.userId) return true;
-      if (!row.postedByUserId) return false;
-      return viewer.networkUserIds.has(row.postedByUserId);
+      // Connection rows do not record requester/acceptance state. Until the
+      // proposed request/accept migration is approved, this tier fails
+      // closed for everyone except the listing owner.
+      return row.postedByUserId === viewer.userId;
     }
     case 'SELECTED_COMPANIES': {
       if (!viewer.userId) return false;
