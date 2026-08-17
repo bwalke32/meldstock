@@ -36,7 +36,7 @@ export async function GET() {
   try {
     const [connections, verified] = await Promise.all([
       prisma.connection.findMany({
-        where: { OR: [{ userIdA: user.id }, { userIdB: user.id }] },
+        where: { status: 'ACCEPTED', OR: [{ userIdA: user.id }, { userIdB: user.id }] },
         select: { userIdA: true, userIdB: true },
       }),
       prisma.profile.findMany({

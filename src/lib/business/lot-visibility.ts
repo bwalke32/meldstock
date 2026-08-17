@@ -83,7 +83,7 @@ export async function resolveVisibilityViewer(userId: string | null): Promise<Vi
       select: { handle: true, verificationStatus: true },
     }),
     prisma.connection.findMany({
-      where: { OR: [{ userIdA: userId }, { userIdB: userId }] },
+      where: { status: 'ACCEPTED', OR: [{ userIdA: userId }, { userIdB: userId }] },
       select: { userIdA: true, userIdB: true },
     }),
   ]);
@@ -116,10 +116,10 @@ function isLotVisibleTo(row: LotLike, viewer: VisibilityViewer): boolean {
       return viewer.verified;
     case 'MY_NETWORK': {
       if (!viewer.userId) return false;
-      // Connection rows do not record requester/acceptance state. Until the
-      // proposed request/accept migration is approved, this tier fails
-      // closed for everyone except the listing owner.
-      return row.postedByUserId === viewer.userId;
+      return (
+        row.postedByUserId === viewer.userId ||
+        (row.postedByUserId !== null && viewer.networkUserIds.has(row.postedByUserId))
+      );
     }
     case 'SELECTED_COMPANIES': {
       if (!viewer.userId) return false;

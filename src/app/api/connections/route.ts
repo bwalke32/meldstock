@@ -1,16 +1,16 @@
 // @polsia:user-owned — `/api/connections` ("My network") endpoints.
 //
-// GET  → list the caller's accepted connections, denormalised into
+// GET  → list the caller's incoming, outgoing, accepted, and legacy rows,
+//        denormalised into
 //        `{ items: [{ connectionUserId, identifier, identifierKind,
 //        handle, displayName, companyName, email, createdAt }] }`. Each row
 //        describes the COUNTERPARTY (the other half of the canonical pair)
 //        so the client island can show "Bob @ Acme Polymers (added Apr 5)".
-// POST → add a connection by HANDLE or EMAIL. The server tries a profile
-//        handle lookup first, falls back to auth-user email. Adding the same
-//        identifier twice is idempotent (200 instead of 201).
-// DELETE → remove a connection by identifier.
+// POST → send a pending request by HANDLE or EMAIL; requester comes from the
+//        authenticated session. PATCH → target-only accept/reject.
+// DELETE → requester cancel, either-party accepted removal, or legacy removal.
 //
-// All three verbs are owner-scoped — viewers can ONLY see / mutate their own
+// All verbs are party-scoped — viewers can ONLY see / mutate their own
 // network; there is no admin master view in v1.
 //
 // Connection rows live in `Connection(userIdA, userIdB)` with the canonical
@@ -23,6 +23,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import {
   ConnectionActionResponse,
+  ConnectionDecisionInput,
   ConnectionList,
   CreateConnectionInput,
   RemoveConnectionInput,
@@ -206,7 +207,17 @@ export async function GET() {
         displayName: profile?.displayName ?? user?.name ?? null,
         companyName: profile?.companyName ?? null,
         email: user?.email.toLowerCase() ?? null,
+        status: row.status,
+        direction:
+          row.status === 'ACCEPTED'
+            ? ('ACCEPTED' as const)
+            : row.requestedByUserId === null
+              ? ('RECONFIRMATION_REQUIRED' as const)
+              : row.requestedByUserId === me
+                ? ('OUTGOING' as const)
+                : ('INCOMING' as const),
         createdAt: row.createdAt.toISOString(),
+        acceptedAt: row.acceptedAt?.toISOString() ?? null,
       };
     });
     return NextResponse.json(ConnectionList.parse({ items }));
@@ -242,12 +253,32 @@ export async function POST(req: Request) {
       where: { userIdA_userIdB: pair },
     });
     if (existing) {
+      if (existing.status === 'ACCEPTED' || existing.requestedByUserId === me) {
+        return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 0 }), {
+          status: 200,
+        });
+      }
+      if (existing.requestedByUserId !== null) {
+        return NextResponse.json(
+          { error: 'This member has already sent you a connection request.' },
+          { status: 409 },
+        );
+      }
+      const reclaimed = await prisma.connection.updateMany({
+        where: { id: existing.id, status: 'PENDING', requestedByUserId: null },
+        data: { requestedByUserId: me },
+      });
+      if (reclaimed.count === 1) {
+        return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 1 }), {
+          status: 200,
+        });
+      }
       return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 0 }), {
         status: 200,
       });
     }
     await prisma.connection.create({
-      data: pair,
+      data: { ...pair, requestedByUserId: me, status: 'PENDING' },
     });
     return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 1 }), {
       status: 201,
@@ -265,6 +296,67 @@ export async function POST(req: Request) {
   }
 }
 
+export async function PATCH(req: Request) {
+  const authed = await requireSessionUserId();
+  if ('response' in authed) return authed.response;
+  const me = authed.userId;
+  try {
+    const parsed = ConnectionDecisionInput.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ errors: flattenZodErrors(parsed.error) }, { status: 400 });
+    }
+    const existing = await prisma.connection.findUnique({
+      where: { id: parsed.data.connectionId },
+    });
+    if (
+      !existing ||
+      existing.status !== 'PENDING' ||
+      existing.requestedByUserId === null ||
+      existing.requestedByUserId === me ||
+      (existing.userIdA !== me && existing.userIdB !== me)
+    ) {
+      return NextResponse.json({ error: 'Connection request not found' }, { status: 404 });
+    }
+
+    if (parsed.data.action === 'ACCEPT') {
+      const result = await prisma.connection.updateMany({
+        where: {
+          id: existing.id,
+          status: 'PENDING',
+          requestedByUserId: existing.requestedByUserId,
+          OR: [{ userIdA: me }, { userIdB: me }],
+        },
+        data: { status: 'ACCEPTED', acceptedAt: new Date() },
+      });
+      if (result.count !== 1) {
+        return NextResponse.json(
+          { error: 'Connection request is no longer pending' },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 1 }));
+    }
+
+    const result = await prisma.connection.deleteMany({
+      where: {
+        id: existing.id,
+        status: 'PENDING',
+        requestedByUserId: existing.requestedByUserId,
+        OR: [{ userIdA: me }, { userIdB: me }],
+      },
+    });
+    if (result.count !== 1) {
+      return NextResponse.json(
+        { error: 'Connection request is no longer pending' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: 1 }));
+  } catch {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: Request) {
   const authed = await requireSessionUserId();
   if ('response' in authed) return authed.response;
@@ -274,19 +366,24 @@ export async function DELETE(req: Request) {
     if (!parsed.success) {
       return NextResponse.json({ errors: flattenZodErrors(parsed.error) }, { status: 400 });
     }
-    const resolution = await resolveIdentifier(me, parsed.data.identifier);
-    if (!resolution.ok) {
-      return NextResponse.json(
-        { error: 'No member matches that handle or email.' },
-        { status: 404 },
-      );
-    }
-    const pair = pairKey(me, resolution.targetUserId);
     const result = await prisma.connection.deleteMany({
-      where: pair,
+      where: {
+        id: parsed.data.connectionId,
+        OR: [{ userIdA: me }, { userIdB: me }],
+        // The requester may cancel a pending request. Either party may remove
+        // an accepted or legacy reconfirmation row. Incoming requests must be
+        // rejected through PATCH so the role is explicit.
+        NOT: {
+          AND: [
+            { status: 'PENDING' },
+            { requestedByUserId: { not: null } },
+            { requestedByUserId: { not: me } },
+          ],
+        },
+      },
     });
     if (result.count === 0) {
-      return NextResponse.json({ error: 'Not in your network' }, { status: 404 });
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 });
     }
     return NextResponse.json(ConnectionActionResponse.parse({ ok: true, count: result.count }));
   } catch {

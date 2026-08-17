@@ -71,6 +71,7 @@ export async function POST(req: Request) {
     const [connections, profiles] = await Promise.all([
       prisma.connection.findMany({
         where: {
+          status: 'ACCEPTED',
           OR: [
             { userIdA: user.id, userIdB: { in: inviteeIds } },
             { userIdB: user.id, userIdA: { in: inviteeIds } },

@@ -10,16 +10,22 @@
 // and a single index scan in either direction finds everyone's connections:
 //     prisma.connection.findMany({ where: { OR: [{ userIdA: me }, { userIdB: me }] } })
 //
-// V1 has no request/approve handshake — every "add" is INSTANT MUTUAL, i.e.
-// strictly symmetric from the moment of creation. The row IS the relationship.
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+}
 
 model Connection {
-  id        String   @id @default(cuid())
-  userIdA   String
-  userIdB   String
-  createdAt DateTime @default(now())
+  id                String           @id @default(cuid())
+  userIdA           String
+  userIdB           String
+  requestedByUserId String?
+  status            ConnectionStatus @default(PENDING)
+  createdAt         DateTime         @default(now())
+  acceptedAt        DateTime?
 
   @@unique([userIdA, userIdB])
-  @@index([userIdA])
-  @@index([userIdB])
+  @@index([userIdA, status])
+  @@index([userIdB, status])
+  @@index([requestedByUserId, status])
 }

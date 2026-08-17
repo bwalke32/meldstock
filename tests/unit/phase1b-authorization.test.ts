@@ -99,7 +99,7 @@ describe('Phase 1B commercial IDOR boundaries', () => {
     mocks.threadFindUnique.mockResolvedValue(commercialThread);
   });
 
-  it('does not treat a unilateral Connection row as accepted MY_NETWORK access', () => {
+  it('grants MY_NETWORK access when the resolved accepted-network set contains the seller', () => {
     const rows = resolveViewerAccess(
       [
         {
@@ -117,7 +117,7 @@ describe('Phase 1B commercial IDOR boundaries', () => {
         networkUserIds: new Set(['seller-user']),
       },
     );
-    expect(rows).toEqual([]);
+    expect(rows).toHaveLength(1);
   });
 
   it('requires authentication before downloading a public listing document', async () => {

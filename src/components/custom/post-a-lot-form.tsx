@@ -378,7 +378,7 @@ export function PostALotForm({ onCreated, compact = false }: PostALotFormProps) 
               : liveVisibility === 'VERIFIED_COMPANIES_ONLY'
                 ? 'Listing is shown only to buyers whose profile is verified — keeps it inside the trading-floor membership.'
                 : liveVisibility === 'MY_NETWORK'
-                  ? 'Only people you’ve added as connections on /dashboard/network see this lot.'
+                  ? 'Only accepted connections in /dashboard/network see this lot.'
                   : liveVisibility === 'SELECTED_COMPANIES'
                     ? 'Only the handles or emails in the chips below see this lot. Lowercase + trim on save.'
                     : 'Your name is replaced by "Meldstock-verified seller" on the listing. Buyers only reach you through the thread.'}

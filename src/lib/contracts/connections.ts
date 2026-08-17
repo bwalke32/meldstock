@@ -22,31 +22,38 @@ export const ConnectionItem = z.object({
   displayName: z.string().nullable(),
   companyName: z.string().nullable(),
   email: z.string().nullable(),
+  status: z.enum(['PENDING', 'ACCEPTED']),
+  direction: z.enum(['INCOMING', 'OUTGOING', 'ACCEPTED', 'RECONFIRMATION_REQUIRED']),
   createdAt: z.string(),
+  acceptedAt: z.string().nullable(),
 });
 export type ConnectionItem = z.infer<typeof ConnectionItem>;
 
 export const ConnectionList = z.object({ items: z.array(ConnectionItem) });
 export type ConnectionList = z.infer<typeof ConnectionList>;
 
-export const CreateConnectionInput = z.object({
-  // Either a bare handle (e.g. "acme-polymers") OR an email address. The
-  // route handler tries handle first, falls back to email lookup.
-  identifier: z
-    .string()
-    .trim()
-    .min(1, 'Enter a handle or email')
-    .max(120, 'Identifier is too long'),
-});
+export const CreateConnectionInput = z
+  .object({
+    // Either a bare handle (e.g. "acme-polymers") OR an email address. The
+    // route handler tries handle first, falls back to email lookup.
+    identifier: z
+      .string()
+      .trim()
+      .min(1, 'Enter a handle or email')
+      .max(120, 'Identifier is too long'),
+  })
+  .strict();
 export type CreateConnectionInput = z.infer<typeof CreateConnectionInput>;
 
-export const RemoveConnectionInput = z.object({
-  identifier: z
-    .string()
-    .trim()
-    .min(1, 'Enter a handle or email')
-    .max(120, 'Identifier is too long'),
-});
+export const ConnectionDecisionInput = z
+  .object({
+    connectionId: z.string().min(1),
+    action: z.enum(['ACCEPT', 'REJECT']),
+  })
+  .strict();
+export type ConnectionDecisionInput = z.infer<typeof ConnectionDecisionInput>;
+
+export const RemoveConnectionInput = z.object({ connectionId: z.string().min(1) }).strict();
 export type RemoveConnectionInput = z.infer<typeof RemoveConnectionInput>;
 
 export const ConnectionActionResponse = z.object({

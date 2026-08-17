@@ -9,7 +9,7 @@ import { siteName } from '@/lib/site';
 export const metadata: Metadata = {
   title: `Network — ${siteName}`,
   description:
-    'Manage your My network of private connections on Meldstock — the audience for any lot you post with “My network” visibility.',
+    'Manage trusted connection requests and accepted connections on Meldstock — only accepted connections can view “My network” lots.',
   alternates: { canonical: '/dashboard/network' },
   robots: { index: false, follow: false },
 };

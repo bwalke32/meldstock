@@ -14,7 +14,7 @@ enum LotType {
 enum LotVisibility {
   PUBLIC
   VERIFIED_COMPANIES_ONLY
-  // MY_NETWORK: only users the lister has added as a Connection can see it.
+  // MY_NETWORK: only users with an ACCEPTED Connection to the lister can see it.
   SELECTED_COMPANIES
   MY_NETWORK
   ANONYMOUS
