@@ -1,4 +1,4 @@
-// @polsia:framework-owned — DO NOT EDIT. Required by the deploy pipeline's healthcheck.
+// @polsia:framework-owned — historical ownership tag; provider-neutral health endpoint.
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';

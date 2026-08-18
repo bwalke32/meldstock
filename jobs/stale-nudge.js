@@ -8,7 +8,7 @@
 // lot's email. Run with `node jobs/stale-nudge.js`; exits 0 on success,
 // 1 on unhandled error.
 //
-// Cron-cadence: `0 9 * * *` (declared in polsia.toml). Staleness window
+// Suggested external scheduler cadence: `0 9 * * *`. Staleness window
 // kept in lockstep with src/lib/business/lot-lifecycle.ts#STALENESS_WINDOW_MS
 // (30 days).
 

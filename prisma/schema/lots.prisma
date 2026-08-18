@@ -1,7 +1,6 @@
 // @polsia:user-owned — plastics-resin trading-floor lots + per-lot threads.
-// File-drop schema: lives at prisma/schema/lots.prisma, materialized at deploy
-// via `prisma db push` (see polsia.toml). Idempotency safe — every new column
-// either has a default or is nullable so existing rows survive a redeploy.
+// File-drop schema: lives at prisma/schema/lots.prisma. Durable changes require
+// reviewed, committed migrations; the marketplace baseline is pending Phase 1C.3.
 
 enum LotType {
   HAVE

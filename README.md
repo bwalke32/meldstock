@@ -1,6 +1,7 @@
-# polsia-next-v2
+# Meldstock
 
-The canonical Next.js template for Polsia-generated customer apps.
+Meldstock is a B2B thermoplastics trading network transitioning from its
+historical Polsia runtime to an independently operated application.
 
 This repository is a scaffold with the shadcn UI baseline built in. It ships the
 framework defaults every app needs on day one: Next.js 16 App Router, React 19,
@@ -85,8 +86,8 @@ signage only.
   restyle them freely. Don't hand-roll the auth security surface (`src/lib/auth.ts`,
   `src/app/api/auth/**`, the prisma auth schema, `require-auth`/`require-admin`):
   those are framework-owned, installed by the auth module.
-- Put recurring work in `polsia.toml` `[[crons]]`; do not use in-process
-  schedulers for product behavior.
+- Invoke recurring work through the provider-neutral one-shot npm job and an
+  external scheduler. See `docs/INDEPENDENT_RUNTIME.md`.
 
 ## Agent Workflow
 
@@ -182,7 +183,7 @@ Reusable app-specific UI belongs in `src/components/custom/**`.
 ├── tests/unit/                       Vitest unit tests
 ├── next.config.ts                    Next config and security headers
 ├── proxy.ts                          CSP nonce and middleware chain slot
-├── polsia.toml                       Deploy manifest and scheduled jobs
+├── docs/INDEPENDENT_RUNTIME.md       Current runtime and local setup contract
 └── AGENTS.md                         Engineering agent operating manual
 ```
 
@@ -220,24 +221,9 @@ module manifests when modules install.
 
 ## Local Development
 
-Use npm; the lockfile is committed.
-
-```bash
-npm install
-npm run typecheck
-npm run lint
-npm run test
-SKIP_ENV_VALIDATION=1 npm run dev
-```
-
-`npm run dev` and `npm run build` validate `DATABASE_URL` and
-`NEXT_PUBLIC_APP_URL` when `SKIP_ENV_VALIDATION` is not set. On a local clone
-without a provisioned database, either set the required vars in `.env.local` or
-prefix the command with `SKIP_ENV_VALIDATION=1`.
-
-`typecheck`, `lint`, and `test` do not require env. With no modules installed,
-`/` serves the `(setup)` placeholder until a module or app-authored root page
-takes over.
+Use npm; the lockfile is committed. Follow `docs/INDEPENDENT_RUNTIME.md` for
+the required Node/PostgreSQL versions, safe local environment, migration
+status, provider defaults, checks, build, start, health check, and scheduled job.
 
 ## Versions
 

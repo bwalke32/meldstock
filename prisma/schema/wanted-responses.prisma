@@ -1,13 +1,12 @@
 // @polsia:user-owned — structured seller responses / counter-offers on
 // WANTED listings (mirrors offer.prisma with the buyer/seller roles
 // flipped: the RFQ poster is the "buyer" and the respondent is the
-// "seller"). File-drop schema; materialised at deploy via `prisma db
-// push` (see polsia.toml). Idempotency safe — every new column is
-// nullable or has a default so existing rows survive a redeploy.
+// "seller"). Durable changes require reviewed, committed migrations; the
+// marketplace baseline is pending Phase 1C.3.
 //
 // Each `WantedResponse` is an immutable negotiation event on the
-// per-(lot, respondent) thread: the seller's initial response, the
-// buyer's counter, etc. Counter history is preserved by creating a
+// per-(lot, respondent) thread: the seller's initial response, the buyer's
+// counter, etc. Counter history is preserved by creating a
 // NEW row with `parentResponseId` pointing at the one it supersedes —
 // no PRIOR response record is overwritten or deleted. Only the LATEST
 // PENDING row is actionable; the older rows are forensic history. On
@@ -25,7 +24,7 @@
 //
 // `PriceUnit` and `FreightTerm` enums are NOT redeclared here — the
 // template's prisma file-drop treats enums as file-drop GLOBALS, so
-// declaring them a second time rejects `prisma db push`. Just refer
+// declaring them a second time rejects Prisma schema validation. Just refer
 // to them by name; they're already declared in offer.prisma.
 
 enum WantedResponseStatus {

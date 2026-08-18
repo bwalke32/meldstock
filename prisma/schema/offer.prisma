@@ -1,8 +1,6 @@
 // @polsia:user-owned — structured offers / counter-offers on HAVE listings.
-// File-drop schema: lives at prisma/schema/offer.prisma, materialised at
-// deploy via `prisma db push` (see polsia.toml). Idempotency safe — every
-// new column is nullable or has a default so existing rows survive a
-// redeploy.
+// File-drop schema: lives at prisma/schema/offer.prisma. Durable changes require
+// reviewed, committed migrations; the marketplace baseline is pending Phase 1C.3.
 //
 // Each `Offer` is an immutable negotiation event on a thread: the buyer's
 // initial ask, a seller's counter, etc. Counter history is preserved by

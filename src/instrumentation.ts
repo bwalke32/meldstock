@@ -1,9 +1,9 @@
 // @polsia:framework-owned — DO NOT EDIT. Next.js server-startup hook.
 //
-// Next calls register() ONCE when the server process boots. We use it to run the
-// app's idempotent startup seed AFTER the schema is applied: polsia.toml's `start`
-// runs `prisma db push` before `npm start`, so by the time this fires the tables
-// exist. Put seed logic in src/lib/seed.ts (user-owned) — this file only owns the
+// Next calls register() ONCE when the server process boots. An operator must apply
+// committed migrations before starting the app. The optional demo seed runs only
+// after explicit ENABLE_DEMO_SEED=1. Put seed logic in src/lib/seed.ts (user-owned)
+// — this file only owns the
 // correctness envelope the agent must not get wrong:
 //   - Node-runtime guard: register() ALSO fires for the edge runtime, where Prisma
 //     cannot run, so we return early there and never pull server-only code into an

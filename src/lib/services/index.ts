@@ -18,7 +18,11 @@ export function createServices(config: NodeJS.ProcessEnv = process.env) {
         : new LocalMailService(),
     storage:
       config.STORAGE_PROVIDER === 'polsia'
-        ? new PolsiaObjectStorage(required('POLSIA_STORAGE_UPLOAD_URL'), required('POLSIA_API_KEY'))
+        ? new PolsiaObjectStorage(
+            required('POLSIA_STORAGE_UPLOAD_URL'),
+            required('POLSIA_API_KEY'),
+            required('POLSIA_LEGACY_STORAGE_ORIGINS'),
+          )
         : new LocalObjectStorage(
             config.LOCAL_STORAGE_PATH ?? path.join(process.cwd(), '.data', 'objects'),
           ),
