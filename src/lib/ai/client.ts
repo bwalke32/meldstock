@@ -8,7 +8,8 @@
 
 import 'server-only';
 import type { ChatMessage } from '@/lib/ai/schema';
-import { env } from '@/lib/env';
+import { services } from '@/lib/services';
+import { AiUnavailableError } from '@/lib/services/ai';
 
 export class AiConfigurationError extends Error {
   constructor(message = 'AI is not configured for this app.') {
@@ -17,7 +18,6 @@ export class AiConfigurationError extends Error {
   }
 }
 
-const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_VISION_MODEL = 'gpt-4o';
 
 // Vision messages carry an array content part; the public chat contract
@@ -39,57 +39,14 @@ export interface ChatOptions {
   signal?: AbortSignal;
 }
 
-function polsiaAiBaseUrl() {
-  return env.POLSIA_AI_BASE_URL.replace(/\/+$/, '');
-}
-
-function polsiaApiKey() {
-  const key = env.POLSIA_API_KEY ?? env.POLSIA_API_TOKEN;
-  if (!key) {
-    throw new AiConfigurationError(
-      'POLSIA_API_KEY is missing. Polsia injects it into deployed apps; local dev must set it manually.',
-    );
-  }
-  return key;
-}
-
-function chatCompletionsBody(opts: ChatOptions, stream: boolean) {
-  return JSON.stringify({
-    model: opts.model ?? DEFAULT_MODEL,
-    messages: opts.messages,
-    stream,
-    ...(typeof opts.temperature === 'number' ? { temperature: opts.temperature } : {}),
-    ...(opts.responseFormat === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
-    // Routed/metered by the platform proxy; harmless to OpenAI-compatible backends.
-    ...(opts.task ? { task: opts.task } : {}),
-  });
-}
-
-async function postChatCompletion(opts: ChatOptions, stream: boolean) {
-  return fetch(`${polsiaAiBaseUrl()}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${polsiaApiKey()}`,
-      'content-type': 'application/json',
-    },
-    body: chatCompletionsBody(opts, stream),
-    cache: 'no-store',
-    signal: opts.signal,
-  });
-}
-
 /** Non-streaming chat completion. Returns the assistant message text. */
 export async function chat(opts: ChatOptions): Promise<string> {
-  const res = await postChatCompletion(opts, false);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) {
-    const detail =
-      body && typeof body === 'object' && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : '';
-    throw new Error(`Polsia AI request failed: ${res.status} ${detail}`.trim());
+  try {
+    return await services.ai.complete(opts);
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw new AiConfigurationError();
+    throw error;
   }
-  return body?.choices?.[0]?.message?.content ?? '';
 }
 
 /**
@@ -97,12 +54,12 @@ export async function chat(opts: ChatOptions): Promise<string> {
  * can relay the OpenAI-compatible SSE stream to the browser unchanged.
  */
 export async function streamChat(opts: ChatOptions): Promise<Response> {
-  const res = await postChatCompletion(opts, true);
-  if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Polsia AI stream failed: ${res.status} ${detail}`.trim());
+  try {
+    return await services.ai.stream(opts);
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw new AiConfigurationError();
+    throw error;
   }
-  return res;
 }
 
 /**

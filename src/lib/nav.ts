@@ -81,5 +81,5 @@ export const navItems: NavItem[] = [
   { label: 'Workflow', href: '/#workflow', group: 'footer', order: 1 },
   { label: 'Pricing', href: '/#pricing', group: 'footer', order: 2 },
   { label: 'FAQ', href: '/#faq', group: 'footer', order: 3 },
-  { label: 'Contact', href: 'mailto:meldstock@polsia.app', group: 'footer', order: 4 },
+  { label: 'Contact', href: 'mailto:contact@meldstock.example', group: 'footer', order: 4 },
 ];

@@ -29,7 +29,6 @@
 // No GET here — documents ship inside `/api/lots/[id]`'s LotDetailResponse
 // so the detail page only ever fetches once.
 import 'server-only';
-import FormDataNode from 'form-data';
 import { NextResponse } from 'next/server';
 import { documentDownloadUrl } from '@/lib/contracts/documents';
 import { DocumentTypeEnum } from '@/lib/contracts/lots';
@@ -37,6 +36,8 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/require-auth';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
+import { services } from '@/lib/services';
+import type { StoredObject } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,9 +145,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
-
   const createdDocs: Array<{
     id: string;
     lotId: string;
@@ -159,30 +157,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   for (const f of files) {
     const buffer = Buffer.from(await f.file.arrayBuffer());
-    const uploadForm = new FormDataNode();
-    uploadForm.append('file', buffer, {
-      filename: f.filename,
-      contentType: f.file.type,
-    });
-    const r2Res = await nodeFetch('https://polsia.com/api/proxy/r2/upload', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.POLSIA_API_KEY}`,
-        ...uploadForm.getHeaders(),
-      },
-      body: uploadForm,
-    });
-    const r2Json = (await r2Res.json()) as {
-      success: boolean;
-      file?: { url: string; filename: string; mime_type: string };
-      error?: { message: string };
-    };
-    if (!r2Json.success || !r2Json.file) {
+    let stored: StoredObject;
+    try {
+      stored = await services.storage.put({
+        bytes: buffer,
+        filename: f.filename,
+        mimeType: f.file.type,
+      });
+    } catch {
       return NextResponse.json(
-        {
-          error: r2Json.error?.message ?? 'Upload failed',
-          uploaded: createdDocs.map((d) => d.id),
-        },
+        { error: 'Upload failed', uploaded: createdDocs.map((d) => d.id) },
         { status: 502 },
       );
     }
@@ -190,9 +174,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       data: {
         lotId,
         type: f.type,
-        filename: r2Json.file.filename,
-        url: r2Json.file.url,
-        mimeType: r2Json.file.mime_type,
+        filename: stored.filename,
+        url: stored.key,
+        mimeType: stored.mimeType,
       },
     });
     createdDocs.push(persisted);

@@ -1,8 +1,8 @@
 {
-  "name": "polsia-app-template",
+  "name": "meldstock",
   "version": "0.3.9",
   "private": true,
-  "description": "Polsia Next.js template with the shadcn UI baseline built in",
+  "description": "Meldstock thermoplastics trading network",
   "engines": {
     "node": ">=20.18.1"
   },
@@ -15,6 +15,7 @@
     "format": "biome format --write",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "job:stale-nudge": "node jobs/stale-nudge.js",
     "db:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",

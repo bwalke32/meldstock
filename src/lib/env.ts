@@ -26,15 +26,25 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(1),
     BETTER_AUTH_URL: z.string().url(),
     BETTER_AUTH_TRUSTED_ORIGINS: z.string().optional(),
-    POLSIA_OWNER_EMAIL: z.string().optional(),
+    MELDSTOCK_BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
     // @polsia:contrib better-auth end
     // @polsia:contrib email start
-    POLSIA_EMAIL_PROXY_URL: z.string().url(),
+    MAIL_PROVIDER: z.enum(['local', 'polsia']).default('local'),
+    STORAGE_PROVIDER: z.enum(['local', 'polsia']).default('local'),
+    AI_PROVIDER: z.enum(['disabled', 'polsia']).default('disabled'),
+    ANALYTICS_PROVIDER: z.enum(['disabled', 'polsia']).default('disabled'),
+    SCHEDULER_PROVIDER: z.enum(['manual', 'polsia']).default('manual'),
+    ENABLE_DEMO_SEED: z.enum(['0', '1']).default('0'),
+    LOCAL_STORAGE_PATH: z.string().optional(),
+    POLSIA_EMAIL_PROXY_URL: z.string().url().optional(),
+    POLSIA_STORAGE_UPLOAD_URL: z.string().url().optional(),
     // @polsia:contrib email end
-    POLSIA_API_KEY: z.string().min(1),
+    POLSIA_API_KEY: z.string().min(1).optional(),
     // @polsia:contrib ai start
-    POLSIA_AI_BASE_URL: z.string().url().default('https://polsia.com/ai/openai/v1'),
+    POLSIA_AI_BASE_URL: z.string().url().optional(),
     POLSIA_API_TOKEN: z.string().min(1).optional(),
+    POLSIA_ANALYTICS_SLUG: z.string().min(1).optional(),
+    POLSIA_API_BASE_URL: z.string().url().optional(),
     // @polsia:contrib ai end
     // @polsia:slot env_vars_server end
   },
@@ -60,15 +70,25 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     BETTER_AUTH_TRUSTED_ORIGINS: process.env.BETTER_AUTH_TRUSTED_ORIGINS,
-    POLSIA_OWNER_EMAIL: process.env.POLSIA_OWNER_EMAIL,
+    MELDSTOCK_BOOTSTRAP_ADMIN_EMAIL: process.env.MELDSTOCK_BOOTSTRAP_ADMIN_EMAIL,
+    MAIL_PROVIDER: process.env.MAIL_PROVIDER,
+    STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    ANALYTICS_PROVIDER: process.env.ANALYTICS_PROVIDER,
+    SCHEDULER_PROVIDER: process.env.SCHEDULER_PROVIDER,
+    ENABLE_DEMO_SEED: process.env.ENABLE_DEMO_SEED,
+    LOCAL_STORAGE_PATH: process.env.LOCAL_STORAGE_PATH,
     // @polsia:contrib better-auth end
     // @polsia:contrib email start
     POLSIA_EMAIL_PROXY_URL: process.env.POLSIA_EMAIL_PROXY_URL,
+    POLSIA_STORAGE_UPLOAD_URL: process.env.POLSIA_STORAGE_UPLOAD_URL,
     // @polsia:contrib email end
     POLSIA_API_KEY: process.env.POLSIA_API_KEY,
     // @polsia:contrib ai start
     POLSIA_AI_BASE_URL: process.env.POLSIA_AI_BASE_URL,
     POLSIA_API_TOKEN: process.env.POLSIA_API_TOKEN,
+    POLSIA_ANALYTICS_SLUG: process.env.POLSIA_ANALYTICS_SLUG,
+    POLSIA_API_BASE_URL: process.env.POLSIA_API_BASE_URL,
     // @polsia:contrib ai end
     // @polsia:slot env_runtime end
   },
@@ -76,3 +96,31 @@ export const env = createEnv({
   // SKIP_ENV_VALIDATION=1 bypasses validation for envless builds (lint/CI/local).
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });
+
+function requireProviderValues(provider: string, values: Array<[string, string | undefined]>) {
+  const missing = values.filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) throw new Error(`${provider} provider requires: ${missing.join(', ')}`);
+}
+
+if (!process.env.SKIP_ENV_VALIDATION) {
+  if (env.MAIL_PROVIDER === 'polsia')
+    requireProviderValues('Polsia mail', [
+      ['POLSIA_EMAIL_PROXY_URL', env.POLSIA_EMAIL_PROXY_URL],
+      ['POLSIA_API_KEY', env.POLSIA_API_KEY],
+    ]);
+  if (env.STORAGE_PROVIDER === 'polsia')
+    requireProviderValues('Polsia storage', [
+      ['POLSIA_STORAGE_UPLOAD_URL', env.POLSIA_STORAGE_UPLOAD_URL],
+      ['POLSIA_API_KEY', env.POLSIA_API_KEY],
+    ]);
+  if (env.AI_PROVIDER === 'polsia')
+    requireProviderValues('Polsia AI', [
+      ['POLSIA_AI_BASE_URL', env.POLSIA_AI_BASE_URL],
+      ['POLSIA_API_KEY or POLSIA_API_TOKEN', env.POLSIA_API_KEY ?? env.POLSIA_API_TOKEN],
+    ]);
+  if (env.ANALYTICS_PROVIDER === 'polsia')
+    requireProviderValues('Polsia analytics', [
+      ['POLSIA_API_BASE_URL', env.POLSIA_API_BASE_URL],
+      ['POLSIA_ANALYTICS_SLUG', env.POLSIA_ANALYTICS_SLUG],
+    ]);
+}

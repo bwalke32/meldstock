@@ -50,6 +50,7 @@ import { GET } from '@/app/api/threads/[threadId]/attachments/[msgId]/download/r
 import { POST as POST_MESSAGE } from '@/app/api/threads/[threadId]/messages/route';
 import { CreateMessage } from '@/lib/contracts/messaging';
 import { issueAttachmentToken, resolveAttachmentToken } from '@/lib/security/attachment-token';
+import { services } from '@/lib/services';
 
 const SECRET = 'test-only-attachment-secret-with-sufficient-entropy';
 
@@ -177,15 +178,13 @@ describe('Phase 1A attachment references', () => {
 
   it('allows a participant through the approved storage path', async () => {
     mocks.isThreadParticipant.mockResolvedValueOnce(true);
-    const fetchMock = vi.fn().mockResolvedValue(new Response('pdf bytes', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    const storageGet = vi
+      .spyOn(services.storage, 'get')
+      .mockResolvedValue({ bytes: Buffer.from('pdf bytes'), mimeType: 'application/pdf' });
     const response = await GET(new Request('http://localhost/download'), {
       params: Promise.resolve({ threadId: 'thread-a', msgId: 'message-a' }),
     });
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://storage.example.test/private/object-123',
-      expect.objectContaining({ redirect: 'error' }),
-    );
+    expect(storageGet).toHaveBeenCalledWith('https://storage.example.test/private/object-123');
   });
 });

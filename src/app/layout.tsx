@@ -7,7 +7,6 @@ import { headers } from 'next/headers';
 import { GlobalMounts } from '@/components/custom/global-mounts';
 import { HeadContent } from '@/components/custom/head-content';
 import { SiteFooter, SiteNav } from '@/components/custom/site-nav';
-import { PolsiaAnalytics } from '@/components/polsia-analytics';
 import { AppProviders } from '@/components/providers';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
@@ -63,8 +62,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     ? undefined
     : ((await headers()).get('x-nonce') ?? undefined);
   // Visitor beacon: deploy-injected app slug + per-env platform base.
-  const analyticsSlug = process.env.POLSIA_ANALYTICS_SLUG;
-  const analyticsBase = process.env.POLSIA_API_BASE_URL;
 
   return (
     <html lang={locale.lang} dir={locale.dir} suppressHydrationWarning>
@@ -88,7 +85,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* Root/global mounts (Cmd+K palette, global listeners, overlays) — edit global-mounts.tsx, not this file. */}
             <GlobalMounts />
           </AppProviders>
-          {analyticsSlug ? <PolsiaAnalytics slug={analyticsSlug} base={analyticsBase} /> : null}
         </ThemeProvider>
       </body>
     </html>

@@ -13,12 +13,13 @@
 //     would). Seed failures degrade gracefully.
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  if (process.env.ENABLE_DEMO_SEED !== '1') return;
 
   try {
     const { seed } = await import('@/lib/seed');
     await seed();
   } catch (error) {
     // biome-ignore lint/suspicious/noConsole: startup diagnostics — the seed failed but the server still boots.
-    console.error('[polsia] startup seed failed:', error);
+    console.error('[meldstock] opt-in demo seed failed:', error);
   }
 }

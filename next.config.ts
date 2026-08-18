@@ -29,9 +29,8 @@ import {
 // Builds the Permissions-Policy value from appCapabilities (relative path: @/ won't resolve here).
 import { buildPermissionsPolicy } from './src/lib/permissions-policy';
 
-// Polsia-platform image hosts (e.g. the R2 asset bucket), injected per-deploy as
-// POLSIA_IMAGE_REMOTE_HOSTS — comma-separated hostnames, Next wildcard syntax OK.
-const polsiaRemotePatterns = (process.env.POLSIA_IMAGE_REMOTE_HOSTS ?? '')
+// Explicit application image hosts, comma-separated; Next wildcard syntax is supported.
+const configuredRemotePatterns = (process.env.IMAGE_REMOTE_HOSTS ?? '')
   .split(',')
   .map((hostname) => hostname.trim())
   .filter(Boolean)
@@ -58,7 +57,7 @@ const nextConfig: NextConfig = {
     // Polsia-platform hosts (deploy-injected) + user hosts from next.user-config.ts;
     // modules append in the slot below.
     remotePatterns: [
-      ...polsiaRemotePatterns,
+      ...configuredRemotePatterns,
       ...userRemotePatterns,
       // @polsia:slot images_remote_patterns start
       // Modules append remote image patterns here at install time. The

@@ -37,7 +37,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 1.42,
         hasCoa: true,
         notes: '50% PCR, food-contact grade. Q3 surplus.',
-        postedByName: 'Polymer Bros.',
+        postedByName: 'SAMPLE — Polymer Bros.',
       },
       {
         type: 'WANTED',
@@ -54,7 +54,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 1.05,
         hasCoa: true,
         notes: 'Looking for monthly recurring offtake, 6 month horizon.',
-        postedByName: 'Midwest Molders Co-op',
+        postedByName: 'SAMPLE — Midwest Molders Co-op',
       },
       {
         type: 'HAVE',
@@ -71,7 +71,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 0.71,
         hasCoa: true,
         notes: '30% PIR, cosmetic blemish <1%. Production overrun.',
-        postedByName: 'Nearshoring Aggregator',
+        postedByName: 'SAMPLE — Nearshoring Aggregator',
       },
       {
         type: 'HAVE',
@@ -88,7 +88,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 2.1,
         hasCoa: true,
         notes: 'Wide-spec MVR window, color grade B. Trimmed order line.',
-        postedByName: 'Bayer Resin Offtake',
+        postedByName: 'SAMPLE — Bayer Resin Offtake',
       },
       {
         type: 'WANTED',
@@ -105,7 +105,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 0.58,
         hasCoa: false,
         notes: 'Bottle-grade PCR, FDA migration documentation on request.',
-        postedByName: 'RPC Intraplast',
+        postedByName: 'SAMPLE — RPC Intraplast',
       },
       {
         type: 'HAVE',
@@ -122,7 +122,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 3.85,
         hasCoa: true,
         notes: 'Glass-filled 35%. New production.',
-        postedByName: 'BASF Surplus Channel',
+        postedByName: 'SAMPLE — BASF Surplus Channel',
       },
       {
         type: 'HAVE',
@@ -139,7 +139,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 1.92,
         hasCoa: false,
         notes: 'Post-industrial trim, ~95 Shore A. Two pallets.',
-        postedByName: 'Estane Bridge',
+        postedByName: 'SAMPLE — Estane Bridge',
       },
       {
         type: 'WANTED',
@@ -156,7 +156,7 @@ export async function seed(): Promise<void> {
         askingPricePerLb: 0.68,
         hasCoa: true,
         notes: 'Bottle-grade wash. ECOSENSE-certified chain of custody.',
-        postedByName: 'PPWR-ready Mill',
+        postedByName: 'SAMPLE — PPWR-ready Mill',
       },
     ],
   });

@@ -25,6 +25,7 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/require-auth';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
+import { services } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,13 +97,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; doc
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
-    const upstream = await nodeFetch(doc.url);
-    if (!upstream.ok) {
+    let stored: { bytes: Buffer; mimeType?: string };
+    try {
+      stored = await services.storage.get(doc.url);
+    } catch {
       return NextResponse.json({ error: 'Document temporarily unavailable' }, { status: 502 });
     }
-    const buf = Buffer.from(await upstream.arrayBuffer());
+    const buf = stored.bytes;
 
     await recordAudit({
       userId,

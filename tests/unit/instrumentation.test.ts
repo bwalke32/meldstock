@@ -6,12 +6,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const ORIGINAL_RUNTIME = process.env.NEXT_RUNTIME;
+const ORIGINAL_SEED = process.env.ENABLE_DEMO_SEED;
 
 afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
   if (ORIGINAL_RUNTIME === undefined) delete process.env.NEXT_RUNTIME;
   else process.env.NEXT_RUNTIME = ORIGINAL_RUNTIME;
+  if (ORIGINAL_SEED === undefined) delete process.env.ENABLE_DEMO_SEED;
+  else process.env.ENABLE_DEMO_SEED = ORIGINAL_SEED;
 });
 
 describe('instrumentation register()', () => {
@@ -25,18 +28,19 @@ describe('instrumentation register()', () => {
     expect(seed).not.toHaveBeenCalled();
   });
 
-  it('runs the seed once on the Node.js runtime', async () => {
+  it('does not seed on ordinary Node.js startup', async () => {
     process.env.NEXT_RUNTIME = 'nodejs';
     const seed = vi.fn().mockResolvedValue(undefined);
     vi.doMock('@/lib/seed', () => ({ seed }));
 
     const { register } = await import('@/instrumentation');
     await register();
-    expect(seed).toHaveBeenCalledTimes(1);
+    expect(seed).not.toHaveBeenCalled();
   });
 
-  it('is fail-open: a throwing seed never rejects, so the server still boots', async () => {
+  it('runs only when opted in and remains fail-open', async () => {
     process.env.NEXT_RUNTIME = 'nodejs';
+    process.env.ENABLE_DEMO_SEED = '1';
     const seed = vi.fn().mockRejectedValue(new Error('seed boom'));
     vi.doMock('@/lib/seed', () => ({ seed }));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

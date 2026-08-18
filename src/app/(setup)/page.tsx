@@ -436,7 +436,7 @@ export default function MeldstockHome() {
             {LOTS.map((lot) => (
               <Link
                 key={lot.id}
-                href="mailto:meldstock@polsia.app"
+                href="mailto:contact@meldstock.example"
                 className="grid grid-cols-12 items-center gap-3 border-b border-border px-5 py-4 text-sm transition-colors duration-150 last:border-b-0 hover:bg-muted/30"
               >
                 <div className="col-span-2 font-mono text-xs text-muted-foreground">{lot.id}</div>
@@ -464,7 +464,7 @@ export default function MeldstockHome() {
             <span>42 active · 7 pending · 3 closed today</span>
             <div className="flex items-center gap-2">
               <Button asChild variant="outline" size="sm">
-                <Link href="mailto:meldstock@polsia.app">Get full feed</Link>
+                <Link href="mailto:contact@meldstock.example">Get full feed</Link>
               </Button>
               <Button asChild size="sm">
                 <Link href="/post-a-lot">Post a lot</Link>
@@ -685,7 +685,7 @@ export default function MeldstockHome() {
                 cell and a broker can push a distressed listing from a warehouse.
               </p>
               <Button asChild variant="outline" size="sm" className="mt-6">
-                <Link href="mailto:meldstock@polsia.app">Walk me through it</Link>
+                <Link href="mailto:contact@meldstock.example">Walk me through it</Link>
               </Button>
             </div>
 
@@ -754,7 +754,7 @@ export default function MeldstockHome() {
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <span>Active grades · counts are listings today / open inquiry threads</span>
             <Button asChild variant="link" size="sm" className="px-0">
-              <Link href="mailto:meldstock@polsia.app">Request a grade index →</Link>
+              <Link href="mailto:contact@meldstock.example">Request a grade index →</Link>
             </Button>
           </div>
         </div>
@@ -819,10 +819,10 @@ export default function MeldstockHome() {
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild size="lg">
-                <Link href="mailto:meldstock@polsia.app">meldstock@polsia.app</Link>
+                <Link href="mailto:contact@meldstock.example">contact@meldstock.example</Link>
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href="mailto:meldstock@polsia.app?subject=Demo%20request">
+                <Link href="mailto:contact@meldstock.example?subject=Demo%20request">
                   Book a Thursday walkthrough
                 </Link>
               </Button>

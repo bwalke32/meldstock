@@ -126,24 +126,9 @@ async function findStaleLotIdsForUser(prisma, userId, now) {
   return rows.map((r) => r.id);
 }
 
-async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is not set');
-  }
-  const proxyUrl = process.env.POLSIA_EMAIL_PROXY_URL;
-  if (!proxyUrl) {
-    throw new Error('POLSIA_EMAIL_PROXY_URL is not set');
-  }
-  const apiKey = process.env.POLSIA_API_KEY || '';
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-
-  const prisma = new PrismaClient({
-    log: ['error'],
-  });
-
-  try {
-    const now = Date.now();
+async function runStaleNudge({ prisma, mail, now = Date.now(), appUrl = 'http://localhost:3000' }) {
+  const cleanAppUrl = appUrl.replace(/\/+$/, '');
+  {
     const windowStart = new Date(now - STALENESS_WINDOW_MS);
     const userRows = await prisma.lot.findMany({
       where: {
@@ -171,7 +156,7 @@ async function main() {
       where: { id: { in: userIds } },
       select: { id: true, email: true, name: true },
     });
-    const dashboardsBase = `${appUrl}/dashboard/inventory`;
+    const dashboardsBase = `${cleanAppUrl}/dashboard/inventory`;
 
     let emailed = 0;
     for (const u of users) {
@@ -202,13 +187,11 @@ async function main() {
       const email = renderStaleEmail({ recipientName, items, dashboardUrl });
 
       try {
-        await sendEmail({
+        await mail.send({
           to: u.email,
           subject: `${items.length} listing${items.length === 1 ? '' : 's'} need a check-in`,
           html: email.html,
           text: email.text,
-          proxyUrl,
-          apiKey,
         });
         emailed += 1;
       } catch (err) {
@@ -229,16 +212,51 @@ async function main() {
     console.log(
       `stale-nudge: emailed ${emailed} owner${emailed === 1 ? '' : 's'} about stale ACTIVE listings`,
     );
+  }
+}
+
+async function main() {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+  const prisma = new PrismaClient({ log: ['error'] });
+  const provider = process.env.MAIL_PROVIDER || 'local';
+  const mail =
+    provider === 'polsia'
+      ? {
+          send: (message) => {
+            if (!process.env.POLSIA_EMAIL_PROXY_URL || !process.env.POLSIA_API_KEY)
+              throw new Error('Polsia mail configuration is incomplete');
+            return sendEmail({
+              ...message,
+              proxyUrl: process.env.POLSIA_EMAIL_PROXY_URL,
+              apiKey: process.env.POLSIA_API_KEY,
+            });
+          },
+        }
+      : {
+          send: async (message) => {
+            void message;
+            return { id: 'local' };
+          },
+        };
+  try {
+    await runStaleNudge({
+      prisma,
+      mail,
+      appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    });
   } finally {
     await prisma.$disconnect().catch(() => undefined);
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    // Surface to stderr so the platform's cron runner sees a non-zero
-    // exit code and the failure shows up in the deploy diagnostic feed.
-    console.error('stale-nudge failed:', err && err.stack ? err.stack : err);
-    process.exit(1);
-  });
+module.exports = { runStaleNudge, renderStaleEmail, findStaleLotIdsForUser };
+
+if (require.main === module)
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      // Surface to stderr so the platform's cron runner sees a non-zero
+      // exit code and the failure shows up in the deploy diagnostic feed.
+      console.error('stale-nudge failed:', err && err.stack ? err.stack : err);
+      process.exit(1);
+    });

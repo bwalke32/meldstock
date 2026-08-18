@@ -317,7 +317,7 @@ export function ProfileEditForm() {
             <div className="flex flex-col gap-1">
               <Label className="text-sm font-medium">Public handle</Label>
               <p className="font-mono text-sm text-foreground">
-                meldstock.polsia.app/u/<span className="text-primary">{profile.handle}</span>
+                meldstock.example/u/<span className="text-primary">{profile.handle}</span>
               </p>
               <p className="text-caption text-muted-foreground">
                 Used on every lot you post and on messages from buyers.
@@ -665,8 +665,8 @@ export function ProfileEditForm() {
         ) : null}
         {profile.verifiedBadge === 'rejected' ? (
           <p className="text-sm text-muted-foreground">
-            The most recent verification request was rejected. Contact us at meldstock@polsia.app
-            and we’ll help you resubmit.
+            The most recent verification request was rejected. Contact us at
+            contact@meldstock.example and we’ll help you resubmit.
           </p>
         ) : null}
       </section>

@@ -4,7 +4,7 @@
 // the user-owned @/lib/email/templates, then: sendEmail({ to, ...welcomeEmail({ name }) }).
 
 import 'server-only';
-import { env } from '@/lib/env';
+import { services } from '@/lib/services';
 
 export interface SendEmailInput {
   to: string;
@@ -23,34 +23,5 @@ export interface SendEmailResult {
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-  const url = `${env.POLSIA_EMAIL_PROXY_URL.replace(/\/+$/, '').replace(/\/send$/, '')}/send`;
-  const body =
-    input.text ??
-    input.html
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  // POLSIA_API_KEY via process.env (platform-injected; not in typed env — ai/stripe declare it).
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${process.env.POLSIA_API_KEY ?? ''}`,
-    },
-    body: JSON.stringify({
-      to: input.to,
-      subject: input.subject,
-      body,
-      html: input.html,
-      ...(input.text ? { text: input.text } : {}),
-      ...(input.replyToEmailId ? { reply_to_email_id: input.replyToEmailId } : {}),
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`email proxy send failed: ${res.status} ${detail}`.trim());
-  }
-  // Proxy returns { success, email_id, message_id, ... } — map email_id to id (absent when suppressed).
-  const json = (await res.json()) as { email_id?: string };
-  return { id: json.email_id ?? '' };
+  return services.mail.send(input);
 }

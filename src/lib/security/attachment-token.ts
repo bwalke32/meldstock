@@ -34,6 +34,7 @@ function keyFor(secret?: string): Buffer {
 }
 
 function assertControlledUrl(raw: string): void {
+  if (/^local:v1:[0-9a-f-]{36}$/.test(raw)) return;
   let url: URL;
   try {
     url = new URL(raw);

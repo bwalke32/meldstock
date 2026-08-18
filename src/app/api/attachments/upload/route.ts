@@ -16,7 +16,6 @@
 // Rate-limit (G4): per-user upload preset. Audit on 429 so spikes are
 // observable.
 import 'server-only';
-import FormDataNode from 'form-data';
 import { NextResponse } from 'next/server';
 import { AttachmentUploadResponse } from '@/lib/contracts/messaging';
 import { requireAuth } from '@/lib/require-auth';
@@ -26,6 +25,8 @@ import {
 } from '@/lib/security/attachment-token';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
+import { services } from '@/lib/services';
+import type { StoredObject } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,34 +94,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Filename is too long' }, { status: 400 });
   }
 
-  const uploadForm = new FormDataNode();
-  uploadForm.append('file', buffer, { filename, contentType: file.type });
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeFetch = require('node-fetch') as typeof import('node-fetch').default;
-  if (!process.env.POLSIA_API_KEY) {
-    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 503 });
-  }
-
-  let r2Res: Awaited<ReturnType<typeof nodeFetch>>;
+  let stored: StoredObject;
   try {
-    r2Res = await nodeFetch('https://polsia.com/api/proxy/r2/upload', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.POLSIA_API_KEY}`,
-        ...uploadForm.getHeaders(),
-      },
-      body: uploadForm,
-    });
+    stored = await services.storage.put({ bytes: buffer, filename, mimeType: file.type });
   } catch {
-    return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 502 });
-  }
-
-  const r2Json = (await r2Res.json().catch(() => null)) as {
-    success: boolean;
-    file?: { url: string; filename: string; mime_type: string };
-  } | null;
-  if (!r2Json?.success || !r2Json.file) {
     return NextResponse.json({ error: 'Attachment storage unavailable' }, { status: 502 });
   }
 
@@ -129,13 +106,13 @@ export async function POST(req: Request) {
   try {
     const wire = AttachmentUploadResponse.parse({
       token: issueAttachmentToken({
-        upstreamUrl: r2Json.file.url,
+        upstreamUrl: stored.key,
         uploadedBy: userId,
-        filename: r2Json.file.filename,
-        mimeType: r2Json.file.mime_type,
+        filename: stored.filename,
+        mimeType: stored.mimeType,
       }),
-      filename: r2Json.file.filename,
-      mimeType: r2Json.file.mime_type,
+      filename: stored.filename,
+      mimeType: stored.mimeType,
     });
     return NextResponse.json(wire, { status: 201 });
   } catch (error) {

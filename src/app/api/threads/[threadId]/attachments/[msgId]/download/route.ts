@@ -16,6 +16,7 @@ import { requireAuth, type SessionUser } from '@/lib/require-auth';
 import { resolveAttachmentToken } from '@/lib/security/attachment-token';
 import { extractIp, recordAudit } from '@/lib/security/audit';
 import { checkLimit, extractIp as headerIp, rateBucketFor } from '@/lib/security/rate-limit';
+import { services } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,14 +105,13 @@ export async function GET(
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
 
-    const upstream = await fetch(attachment.upstreamUrl, {
-      cache: 'no-store',
-      redirect: 'error',
-    });
-    if (!upstream.ok) {
+    let stored: { bytes: Buffer; mimeType?: string };
+    try {
+      stored = await services.storage.get(attachment.upstreamUrl);
+    } catch {
       return NextResponse.json({ error: 'Attachment temporarily unavailable' }, { status: 502 });
     }
-    const buf = Buffer.from(await upstream.arrayBuffer());
+    const buf = stored.bytes;
 
     await recordAudit({
       userId: user.id,
