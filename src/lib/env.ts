@@ -38,6 +38,7 @@ export const env = createEnv({
     LOCAL_STORAGE_PATH: z.string().optional(),
     POLSIA_EMAIL_PROXY_URL: z.string().url().optional(),
     POLSIA_STORAGE_UPLOAD_URL: z.string().url().optional(),
+    POLSIA_LEGACY_STORAGE_ORIGINS: z.string().optional(),
     // @polsia:contrib email end
     POLSIA_API_KEY: z.string().min(1).optional(),
     // @polsia:contrib ai start
@@ -82,6 +83,7 @@ export const env = createEnv({
     // @polsia:contrib email start
     POLSIA_EMAIL_PROXY_URL: process.env.POLSIA_EMAIL_PROXY_URL,
     POLSIA_STORAGE_UPLOAD_URL: process.env.POLSIA_STORAGE_UPLOAD_URL,
+    POLSIA_LEGACY_STORAGE_ORIGINS: process.env.POLSIA_LEGACY_STORAGE_ORIGINS,
     // @polsia:contrib email end
     POLSIA_API_KEY: process.env.POLSIA_API_KEY,
     // @polsia:contrib ai start
@@ -112,6 +114,7 @@ if (!process.env.SKIP_ENV_VALIDATION) {
     requireProviderValues('Polsia storage', [
       ['POLSIA_STORAGE_UPLOAD_URL', env.POLSIA_STORAGE_UPLOAD_URL],
       ['POLSIA_API_KEY', env.POLSIA_API_KEY],
+      ['POLSIA_LEGACY_STORAGE_ORIGINS', env.POLSIA_LEGACY_STORAGE_ORIGINS],
     ]);
   if (env.AI_PROVIDER === 'polsia')
     requireProviderValues('Polsia AI', [

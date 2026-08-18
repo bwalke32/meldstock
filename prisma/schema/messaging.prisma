@@ -1,8 +1,7 @@
 // @polsia:user-owned — message threads spanning listing-scoped
 // (1:1 + N-way group) and broker-group rooms (not tied to a single lot).
-// Materialised at deploy via `prisma db push` (see polsia.toml). Every
-// column is optional or has a default so redploys on existing DBs stay
-// idempotent.
+// Durable changes require reviewed, committed migrations; the marketplace
+// baseline is pending Phase 1C.3.
 //
 // `buyerId`, `sellerId`, `senderId`, `ThreadParticipant.userId` and
 // `ThreadParticipant.addedBy` are plain SCALAR FKs to better-auth's locked

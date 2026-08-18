@@ -1,3 +1,7 @@
+# ARCHIVED HISTORICAL CONFIGURATION — NOT AN APPROVED MELDSTOCK RUNTIME PATH.
+# Preserved from the Polsia export for provenance only. Do not copy, execute,
+# rename to the repository root, or use any command in this file for deployment.
+#
 # polsia.toml — Polsia deploy manifest for this Next.js + Prisma app.
 #
 # Read SERVER-SIDE by Polsia's deploy pipeline at the deployed commit to drive

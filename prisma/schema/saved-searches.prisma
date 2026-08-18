@@ -1,6 +1,6 @@
 // @polsia:user-owned — saved browse searches + email-on-match. Materialised at
-// deploy via `prisma db push`. Idempotent — every column has a default so a
-// redeploy on an existing DB is safe.
+// Durable changes require reviewed, committed migrations; the marketplace
+// baseline is pending Phase 1C.3.
 //
 // `userId` is a plain SCALAR FK to better-auth's locked `User.id`. No
 // `@relation` — User lives in the framework-owned prisma/schema/auth.prisma and
