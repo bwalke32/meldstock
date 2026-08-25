@@ -38,13 +38,16 @@ npm start
 `npm run db:migrate:deploy` runs `prisma migrate deploy`. Never substitute a
 schema-push workflow in a shared, staging, or production environment.
 
-Important Phase 1C.2 limitation: committed migrations currently create Better
-Auth tables and the isolated Connection shape only. They do not yet create the
-complete marketplace schema. Phase 1C.3 must create and verify the reviewed
-baseline before a brand-new database can run the complete app. Until then, a
-fresh disposable database is useful for validating current migration history,
-but full data-backed application workflows require an existing compatible
-development database. Do not point local setup at production to work around this.
+Phase 1C.3 completed and verified four committed migrations: Better Auth,
+Better Auth admin fields, the isolated Connection consent migration, and the
+marketplace baseline. On a brand-new empty PostgreSQL database,
+`npm run db:migrate:deploy` now produces the complete 20-table, 18-enum schema
+without a schema-push step.
+
+Do not assume that proof makes an existing independently managed database safe
+to migrate. Existing databases must follow
+`docs/EXISTING_DATABASE_ADOPTION.md`; never point the fresh-database workflow at
+an unmanaged database to see what happens.
 
 ## Authentication
 
@@ -113,9 +116,9 @@ provider sends nothing.
 4. Run `npm run db:generate`, `npm run db:validate`, `npm test`,
    `npm run typecheck`, and `npm run lint`.
 5. Run `SKIP_ENV_VALIDATION=1 npm run build` for the repository compile check.
-6. Run `npm run db:migrate:deploy` only against the disposable database, with the
-   incomplete-baseline limitation above understood.
+6. Run `npm run db:migrate:deploy` only against the fresh disposable database.
 7. Run `npm start` (or `npm run dev`) and check `http://localhost:3000/health`.
 
 The core web process can build and start without Polsia credentials. Complete
-fresh-database marketplace workflows remain intentionally blocked on Phase 1C.3.
+fresh-database marketplace workflows are supported by the accepted migrations.
+Existing-database adoption remains a separate, review-gated process.
