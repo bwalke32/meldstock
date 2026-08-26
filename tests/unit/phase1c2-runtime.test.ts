@@ -26,6 +26,12 @@ describe('Phase 1C.2 independent runtime', () => {
     expect(Object.values(scripts).join('\n')).not.toContain('polsia.toml');
   });
 
+  it('keeps the server environment module out of the client navigation bundle', () => {
+    const navigation = read('src/components/custom/site-nav.tsx');
+    expect(navigation).toContain("from '@/lib/brand'");
+    expect(navigation).not.toContain("from '@/lib/site'");
+  });
+
   it('keeps core provider defaults Polsia-independent', () => {
     const services = createServices({ NODE_ENV: 'test' });
     expect(services.mail.constructor.name).toBe('LocalMailService');

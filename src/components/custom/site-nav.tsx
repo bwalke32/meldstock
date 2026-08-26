@@ -23,8 +23,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 // `data.session`, which is just the session record on better-auth) — the
 // common-but-wrong port from Auth.js.
 import { useSession } from '@/lib/auth-client';
+import { siteName } from '@/lib/brand';
 import { type NavGroup, type NavItem, navItems } from '@/lib/nav';
-import { siteName } from '@/lib/site';
 import { cn } from '@/lib/utils';
 
 function useIsAuthenticated(): boolean {
