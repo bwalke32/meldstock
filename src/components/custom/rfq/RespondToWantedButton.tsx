@@ -32,6 +32,8 @@ export interface RespondToWantedButtonProps {
   postedByUserId: string | null;
   postedByName: string;
   lotSummary: string;
+  /** True only for the current viewer; does not reveal an anonymous buyer id. */
+  viewerIsOwner?: boolean;
 }
 
 export function RespondToWantedButton({
@@ -39,6 +41,7 @@ export function RespondToWantedButton({
   postedByUserId,
   postedByName,
   lotSummary,
+  viewerIsOwner = false,
 }: RespondToWantedButtonProps) {
   const { data: session, isPending } = useSession();
   const [open, setOpen] = useState(false);
@@ -49,11 +52,12 @@ export function RespondToWantedButton({
   if (!session?.user?.id) {
     return null;
   }
-  // Anonymous lot: no structured response path.
-  if (!postedByUserId) {
+  // The detail endpoint supplies this privacy-safe flag even when the
+  // anonymous request intentionally scrubs postedByUserId from the wire.
+  if (viewerIsOwner) {
     return null;
   }
-  // Viewer IS the lot poster: route rejects at 409. Don't even show.
+  // Non-anonymous fallback: hide the action for the request owner.
   if (postedByUserId === session.user.id) {
     return null;
   }
@@ -71,11 +75,11 @@ export function RespondToWantedButton({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Respond to {postedByName}&apos;s WANTED listing</DialogTitle>
+            <DialogTitle>Respond to this material request</DialogTitle>
             <DialogDescription>
-              Submit a structured response on {lotSummary}. The buyer can accept, counter with their
-              own terms, or decline. Counters preserve the full negotiation history — nothing you
-              submit here is ever silent or hidden.
+              Submit a structured response on {lotSummary}. The requester can accept, counter, or
+              decline without their identity being exposed publicly. A private thread opens when
+              your response is submitted.
             </DialogDescription>
           </DialogHeader>
           <ResponseForm
