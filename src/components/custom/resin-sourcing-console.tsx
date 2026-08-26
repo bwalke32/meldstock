@@ -279,13 +279,13 @@ export function ResinSourcingConsole() {
               icon={<PackageSearch />}
               label="Parse"
               value="Polymer, grade and modifiers"
-              active={checks[0]}
+              active={Boolean(checks[0])}
             />
             <RouteStep
               icon={<MapPin />}
               label="Route"
               value="Material focus and geography"
-              active={checks[2]}
+              active={Boolean(checks[2])}
             />
             <RouteStep
               icon={<Route />}
