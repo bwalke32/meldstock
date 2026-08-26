@@ -284,7 +284,7 @@ export function ResinSourcingConsole() {
             <RouteStep
               icon={<MapPin />}
               label="Route"
-              value="Material focus and geography"
+              value="Search and alerts by material + region"
               active={Boolean(checks[2])}
             />
             <RouteStep
@@ -297,7 +297,7 @@ export function ResinSourcingConsole() {
 
           <p className="mt-6 flex gap-2 border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-            Structured matching first. Human material judgment handles equivalents and edge cases.
+            Structured search and alerts first. Human material judgment handles equivalents and edge cases.
           </p>
         </aside>
       </div>
