@@ -39,7 +39,6 @@ export interface RespondToWantedButtonProps {
 export function RespondToWantedButton({
   lotId,
   postedByUserId,
-  postedByName,
   lotSummary,
   viewerIsOwner = false,
 }: RespondToWantedButtonProps) {
