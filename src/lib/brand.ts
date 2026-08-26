@@ -3,20 +3,20 @@
 
 export const siteName = 'Meldstock';
 export const siteDescription =
-  'Live HAVE/WANTED trading floor for plastics resin — brokers, molders, extruders, recyclers, and compounders push spec-sheet listings, see a self-refreshing feed, and negotiate via private threads. Built around PPWR, US state EPR, and FDA migration.';
+  'A private thermoplastic sourcing network connecting injection molders with the brokers and resin sales specialists best equipped to solve each material request.';
 
 // PWA + social-share colors. HEX only (the oklch() tokens in globals.css aren't
 // readable here) — set to match your brand seed.
 export const brandVisual = {
   /** PWA browser-UI / status-bar color. */
-  themeColor: '#c2680a',
+  themeColor: '#0f766e',
   /** PWA splash + install background. */
-  backgroundColor: '#0f0d09',
+  backgroundColor: '#071c1b',
   /** Social-share (OG/Twitter) image. */
   og: {
-    background: '#0f0d09',
+    background: '#071c1b',
     foreground: '#fbf8f1',
     /** Second line under the site name; '' hides it. */
-    tagline: 'Live plastics trading floor.',
+    tagline: 'One request. The right resin specialists.',
   },
 } as const;

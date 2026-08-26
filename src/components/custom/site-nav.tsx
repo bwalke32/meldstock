@@ -6,7 +6,6 @@ import { ChevronDown, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
-import { ThemeToggle } from '@/components/custom/theme-toggle';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -34,7 +33,12 @@ function useIsAuthenticated(): boolean {
 
 function visibleItems(group: NavGroup, isAuthenticated: boolean): NavItem[] {
   return navItems
-    .filter((item) => item.group === group && (!item.requiresAuth || isAuthenticated))
+    .filter(
+      (item) =>
+        item.group === group &&
+        (!item.requiresAuth || isAuthenticated) &&
+        (!item.hideWhenAuthenticated || !isAuthenticated),
+    )
     .sort(
       (a, b) =>
         (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) ||
@@ -113,13 +117,16 @@ export function SiteNav() {
     slot.type === 'link' ? isActive(slot.item.href) : slot.items.some((i) => isActive(i.href));
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <nav
         aria-label="Primary"
-        className="mx-auto flex h-14 max-w-screen-xl items-center gap-2 px-4"
+        className="mx-auto flex h-16 max-w-screen-xl items-center gap-2 px-4"
       >
-        <Link href="/" className="mr-2 shrink-0 truncate text-base font-semibold tracking-tight">
-          {siteName}
+        <Link href="/" className="mr-3 flex shrink-0 items-center gap-2">
+          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+            M
+          </span>
+          <span className="truncate text-base font-semibold tracking-[-0.02em]">{siteName}</span>
         </Link>
 
         {/* Desktop (md+): inline slots — direct links + `menu` dropdowns */}
@@ -228,16 +235,18 @@ export function SiteNav() {
           {/* Desktop secondary buttons */}
           <div className="hidden items-center gap-1 md:flex">
             {secondary.map((item) => (
-              <Button key={item.href} asChild variant="secondary" size="sm">
+              <Button
+                key={item.href}
+                asChild
+                variant={item.emphasis ? 'default' : 'ghost'}
+                size="sm"
+              >
                 <Link href={item.href} aria-current={isActive(item.href) ? 'page' : undefined}>
                   {item.label}
                 </Link>
               </Button>
             ))}
           </div>
-
-          {/* Always visible */}
-          <ThemeToggle />
 
           {/* Mobile (below md): burger + drawer — only when there's something to collapse */}
           {collapsedCount > 0 && (
@@ -306,7 +315,7 @@ export function SiteNav() {
                         <Button
                           key={item.href}
                           asChild
-                          variant="secondary"
+                          variant={item.emphasis ? 'default' : 'ghost'}
                           className="w-full justify-start"
                         >
                           <Link

@@ -125,10 +125,10 @@
    border role + dark mode from these (see the derived block below), so editing
    --brand-h ALONE recolors the entire site. Keep values in range. */
 :root {
-  --brand-h: 32; /* molten-resin amber — industrial, not consumer SaaS */
-  --brand-c: 0.16; /* restrained chroma — professional B2B */
-  --brand-l: 0.58; /* mid lightness — readable in both light and dark */
-  --radius: 0.25rem; /* sharp / spec-sheet — technical, not friendly */
+  --brand-h: 184; /* deep process teal — technical, calm, and globally legible */
+  --brand-c: 0.11; /* restrained chroma — professional B2B */
+  --brand-l: 0.51; /* dark enough for confident light-mode contrast */
+  --radius: 0.5rem; /* approachable without drifting into consumer softness */
 
   --font-display: "Inter", "ui-sans-serif", "system-ui", sans-serif;
   --font-body: "Inter", "ui-sans-serif", "system-ui", sans-serif;

@@ -51,6 +51,8 @@ import { cn } from '@/lib/utils';
 interface SignUpFormProps {
   /** Optional next path to redirect to after successful signup. */
   redirectTo?: string;
+  /** Preselect the role when the user enters from a focused audience CTA. */
+  initialRole?: BusinessRole;
 }
 
 // Step 1 — local validation only; better-auth's signUp.email validates the
@@ -135,7 +137,10 @@ const StepTwoSchema = z.object({
 // Profile-creating response shape: { profile: ProfilePublic }
 const ProfileCreatedSchema = z.object({ profile: ProfileItem });
 
-export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
+export function SignUpForm({
+  redirectTo = '/request-material',
+  initialRole = 'INJECTION_MOLDER',
+}: SignUpFormProps) {
   const [step, setStep] = useState<'one' | 'two'>('one');
   const [stepOne, setStepOne] = useState<StepOneValues | null>(null);
   const [pending, setPending] = useState(false);
@@ -149,7 +154,7 @@ export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
 
   const stepTwoForm = useForm<StepTwoValues>({
     resolver: zodResolver(StepTwoSchema) as Resolver<StepTwoValues>,
-    defaultValues: STEP_TWO_DEFAULTS,
+    defaultValues: { ...STEP_TWO_DEFAULTS, role: initialRole },
     mode: 'onBlur',
   });
 
@@ -208,7 +213,7 @@ export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
         schema: ProfileCreatedSchema,
       });
       void created;
-      toast.success('Account created. Welcome to the floor.');
+      toast.success('Account created. Welcome to Meldstock.');
       window.location.assign(redirectTo);
     } catch (err) {
       const applied = err instanceof Error && applyServerErrors(err.cause, stepTwoForm.setError);
@@ -322,7 +327,7 @@ export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
     <Form {...stepTwoForm}>
       <form onSubmit={onStepTwo} className="flex flex-col gap-4" noValidate>
         <p className="text-caption text-muted-foreground">
-          Step 2 of 2 · Trading profile for{' '}
+          Step 2 of 2 · Sourcing profile for{' '}
           <span className="font-medium text-foreground">{stepOne.email}</span>
         </p>
         {isCompany ? (
@@ -383,7 +388,7 @@ export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <FormDescription>What your business does on the floor.</FormDescription>
+              <FormDescription>What your business does in the sourcing network.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -435,13 +440,13 @@ export function SignUpForm({ redirectTo = '/trading-floor' }: SignUpFormProps) {
               <FormLabel>About you {isCompany ? ' / your company' : ''}</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Specialises in prime and off-spec PP. Monthly volumes out of the US Gulf, ships to Mexico and the EU. Open to mutually beneficial barters."
+                  placeholder="Materials you buy or source, typical volumes, industries served, regions covered, and relevant certifications."
                   className="min-h-[80px]"
                   {...field}
                   value={field.value ?? ''}
                 />
               </FormControl>
-              <FormDescription>Public, shown to other members on the floor.</FormDescription>
+              <FormDescription>Shown to other members of the sourcing network.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
