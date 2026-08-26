@@ -2,7 +2,7 @@
   "name": "meldstock",
   "version": "0.3.9",
   "private": true,
-  "description": "Meldstock thermoplastics trading network",
+  "description": "Meldstock private thermoplastic sourcing network",
   "engines": {
     "node": ">=20.18.1"
   },

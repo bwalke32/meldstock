@@ -17,6 +17,10 @@ export interface NavItem {
   menu?: string;
   /** When true, render only if a session exists (see site-nav.tsx). */
   requiresAuth?: boolean;
+  /** When true, hide once a session exists (used for sign-in/sign-up links). */
+  hideWhenAuthenticated?: boolean;
+  /** Render as the single high-emphasis conversion action. */
+  emphasis?: boolean;
   /** Sort key within a group (ascending); unordered items fall to the end. */
   order?: number;
 }
@@ -30,56 +34,42 @@ export interface NavItem {
 //
 // In-page anchors (/#features, /#lots) are valid hrefs for a single-page launch.
 export const navItems: NavItem[] = [
-  { label: 'Trading floor', href: '/trading-floor', group: 'primary', order: 0 },
-  { label: 'Lots', href: '/lots', group: 'primary', order: 1 },
-  { label: 'Marketplace', href: '/#lots', group: 'primary', order: 2 },
-  { label: 'Intelligence', href: '/#intelligence', group: 'primary', order: 3 },
-  { label: 'Docs', href: '/#faq', group: 'primary', menu: 'Resources', order: 4 },
-  { label: 'Grade index', href: '/#grades', group: 'primary', menu: 'Resources', order: 5 },
+  { label: 'How it works', href: '/#how-it-works', group: 'primary', order: 0 },
+  { label: 'For molders', href: '/#for-molders', group: 'primary', order: 1 },
+  { label: 'For specialists', href: '/#for-specialists', group: 'primary', order: 2 },
+  { label: 'Pricing', href: '/#pricing', group: 'primary', order: 3 },
 
-  // Conversion CTAs in the secondary cluster of the top bar.
-  { label: 'Post a lot', href: '/post-a-lot', group: 'secondary', order: 0 },
-  { label: 'Sign in', href: '/login', group: 'secondary', order: 1 },
-  { label: 'Create account', href: '/signup', group: 'secondary', order: 2 },
-  { label: 'Messages', href: '/messages', group: 'secondary', requiresAuth: true, order: 2.5 },
-  { label: 'Dashboard', href: '/dashboard', group: 'secondary', requiresAuth: true, order: 3 },
+  // One public conversion action plus a quiet sign-in link.
   {
-    label: 'Saved searches',
-    href: '/dashboard/saved-searches',
+    label: 'Sign in',
+    href: '/login',
     group: 'secondary',
-    requiresAuth: true,
-    // Lands between Dashboard (3) and Network (3.5) so the four dashboard
-    // routes render in the order: Dashboard, Saved searches, Network. Same
-    // auth-gated pattern as the other dashboard entries; the page's own
-    // `robots: noindex` keeps it out of the public sitemap even though the
-    // link itself surfaces for authed visitors.
-    order: 3.4,
+    hideWhenAuthenticated: true,
+    order: 0,
   },
   {
-    label: 'Network',
-    href: '/dashboard/network',
+    label: 'Request material',
+    href: '/request-material',
     group: 'secondary',
-    requiresAuth: true,
-    order: 3.5,
+    emphasis: true,
+    order: 1,
   },
-  // Inventory dashboard entry — the lot lifecycle table (refresh / bulk
-  // deactivate / confirm-available). Lands just below Network (3.5) so the
-  // four dashboard routes render in the order: Saved searches, Network,
-  // My listings. Auth-gated alongside the rest; the page itself sets
-  // `robots: noindex` so it never leaks into the public sitemap.
+
+  // Authenticated users get only the core request/reply surfaces in the header.
   {
-    label: 'My listings',
+    label: 'My requests',
     href: '/dashboard/inventory',
     group: 'secondary',
     requiresAuth: true,
-    order: 3.2,
+    order: 0,
   },
-  { label: 'My profile', href: '/profile', group: 'secondary', requiresAuth: true, order: 4 },
+  { label: 'Messages', href: '/messages', group: 'secondary', requiresAuth: true, order: 0.5 },
 
-  // Long tail — footer.
-  { label: 'Compliance', href: '/#compliance', group: 'footer', order: 0 },
-  { label: 'Workflow', href: '/#workflow', group: 'footer', order: 1 },
-  { label: 'Pricing', href: '/#pricing', group: 'footer', order: 2 },
-  { label: 'FAQ', href: '/#faq', group: 'footer', order: 3 },
-  { label: 'Contact', href: 'mailto:contact@meldstock.example', group: 'footer', order: 4 },
+  // The earlier marketplace tools remain reachable by URL while the product
+  // pivot is validated; removing them from the public navigation is reversible.
+  { label: 'How it works', href: '/#how-it-works', group: 'footer', order: 0 },
+  { label: 'For molders', href: '/#for-molders', group: 'footer', order: 1 },
+  { label: 'For specialists', href: '/#for-specialists', group: 'footer', order: 2 },
+  { label: 'Pricing', href: '/#pricing', group: 'footer', order: 3 },
+  { label: 'FAQ', href: '/#faq', group: 'footer', order: 4 },
 ];
