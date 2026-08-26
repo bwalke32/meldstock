@@ -69,8 +69,8 @@ export default function MeldstockHome() {
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
               No fake AI magic and no generic supplier directory. Meldstock uses structured resin
-              data for reliable search and alerts, then keeps experienced human judgment in the loop for
-              equivalents, qualification, and commercial fit.
+              data for reliable search and alerts, then keeps experienced human judgment in the loop
+              for equivalents, qualification, and commercial fit.
             </p>
           </div>
 
