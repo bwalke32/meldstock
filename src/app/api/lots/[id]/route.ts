@@ -112,7 +112,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }));
     return NextResponse.json(
       LotDetailResponse.parse({
-        lot: lotRowToWire(scrubbed as unknown as LotRow),
+        lot: {
+          ...lotRowToWire(scrubbed as unknown as LotRow),
+          viewerIsOwner: viewerUserId !== null && lot.postedByUserId === viewerUserId,
+        },
         messages: [],
         documents: DocumentList.parse({ items: documentItems }),
       }),

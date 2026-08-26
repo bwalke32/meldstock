@@ -429,12 +429,13 @@ function LotReady({
                 lotSummary={lotSummary}
               />
             ) : null}
-            {isWanted && lot.postedByUserId ? (
+            {isWanted ? (
               <RespondToWantedButton
                 lotId={lot.id}
                 postedByUserId={lot.postedByUserId}
                 postedByName={lot.postedByName}
                 lotSummary={lotSummary}
+                viewerIsOwner={lot.viewerIsOwner}
               />
             ) : null}
             {/* "View seller profile" flips to "Broker profile →" when the
