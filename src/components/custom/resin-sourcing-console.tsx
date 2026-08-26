@@ -224,7 +224,11 @@ export function ResinSourcingConsole() {
                 Live spec intelligence
               </p>
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
-                {brief.material ? (recognized ? 'Requirement recognized' : 'Exact text preserved') : 'Waiting for input'}
+                {brief.material
+                  ? recognized
+                    ? 'Requirement recognized'
+                    : 'Exact text preserved'
+                  : 'Waiting for input'}
               </h2>
             </div>
             <div className="relative flex size-11 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
@@ -271,9 +275,24 @@ export function ResinSourcingConsole() {
           </div>
 
           <ol className="mt-6 space-y-3">
-            <RouteStep icon={<PackageSearch />} label="Parse" value="Polymer, grade and modifiers" active={checks[0]} />
-            <RouteStep icon={<MapPin />} label="Route" value="Material focus and geography" active={checks[2]} />
-            <RouteStep icon={<Route />} label="Connect" value="Private specialist responses" active={readiness >= 75} />
+            <RouteStep
+              icon={<PackageSearch />}
+              label="Parse"
+              value="Polymer, grade and modifiers"
+              active={checks[0]}
+            />
+            <RouteStep
+              icon={<MapPin />}
+              label="Route"
+              value="Material focus and geography"
+              active={checks[2]}
+            />
+            <RouteStep
+              icon={<Route />}
+              label="Connect"
+              value="Private specialist responses"
+              active={readiness >= 75}
+            />
           </ol>
 
           <p className="mt-6 flex gap-2 border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
