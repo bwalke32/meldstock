@@ -49,9 +49,8 @@ export default function MeldstockHome() {
               <span className="text-primary">right material people.</span>
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground md:text-xl">
-              Meldstock turns an injection molder’s technical requirement into a structured,
-              private sourcing brief and routes it to brokers and resin specialists equipped to
-              solve it.
+              Meldstock turns an injection molder’s technical requirement into a structured, private
+              sourcing brief and routes it to brokers and resin specialists equipped to solve it.
             </p>
           </div>
 
@@ -165,15 +164,7 @@ export default function MeldstockHome() {
   );
 }
 
-function EngineStep({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
+function EngineStep({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <article className="bg-card p-6">
       <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-5">
@@ -203,7 +194,9 @@ function RolePanel({
   border?: boolean;
 }) {
   return (
-    <article className={`py-10 lg:p-12 ${border ? 'border-t border-border lg:border-l lg:border-t-0' : ''}`}>
+    <article
+      className={`py-10 lg:p-12 ${border ? 'border-t border-border lg:border-l lg:border-t-0' : ''}`}
+    >
       <span className="flex size-10 items-center justify-center rounded-lg border border-primary/20 bg-primary/8 text-primary [&>svg]:size-5">
         {icon}
       </span>
