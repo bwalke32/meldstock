@@ -50,7 +50,7 @@ export default function MeldstockHome() {
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground md:text-xl">
               Meldstock turns an injection molder’s technical requirement into a structured, private
-              sourcing brief and routes it to brokers and resin specialists equipped to solve it.
+              sourcing brief that qualified brokers and resin specialists can find and answer.
             </p>
           </div>
 
@@ -63,13 +63,13 @@ export default function MeldstockHome() {
       <section id="matching" className="container-page py-section" aria-labelledby="engine-title">
         <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:gap-16">
           <div>
-            <span className="text-eyebrow">The matching engine</span>
+            <span className="text-eyebrow">The sourcing engine</span>
             <h2 id="engine-title" className="mt-3 font-display text-h2 text-foreground">
               Software narrows the field. Experts solve the material problem.
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
               No fake AI magic and no generic supplier directory. Meldstock uses structured resin
-              data for reliable routing, then keeps experienced human judgment in the loop for
+              data for reliable search and alerts, then keeps experienced human judgment in the loop for
               equivalents, qualification, and commercial fit.
             </p>
           </div>
@@ -83,7 +83,7 @@ export default function MeldstockHome() {
             <EngineStep
               icon={<DatabaseZap />}
               title="2. Match"
-              body="Score specialist fit using material expertise, region, volume range, condition, and exact-versus-equivalent rules."
+              body="Make each request searchable by resin, grade, region, quantity, condition, and exact-versus-equivalent rules."
             />
             <EngineStep
               icon={<Network />}
