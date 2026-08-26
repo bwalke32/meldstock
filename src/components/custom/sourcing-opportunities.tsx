@@ -9,10 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLotsBrowse } from '@/hooks/use-lots-browse';
 import { matchesLotFilter } from '@/lib/business/lot-filters';
-import {
-  mergeParsedIntoFilter,
-  parseResinQuery,
-} from '@/lib/business/resin-abbreviations';
+import { mergeParsedIntoFilter, parseResinQuery } from '@/lib/business/resin-abbreviations';
 import { normalizeResinInput } from '@/lib/business/resin-normalize';
 import { DEFAULT_FILTER, type LotFilter } from '@/lib/contracts/lots-filters';
 
@@ -24,10 +21,7 @@ export function SourcingOpportunities() {
   const [location, setLocation] = React.useState('');
 
   const parsed = React.useMemo(() => parseResinQuery(query), [query]);
-  const normalized = React.useMemo(
-    () => normalizeResinInput(query, { mode: 'search' }),
-    [query],
-  );
+  const normalized = React.useMemo(() => normalizeResinInput(query, { mode: 'search' }), [query]);
   const filter = React.useMemo(() => {
     const withQuery = parsed ? mergeParsedIntoFilter(WANTED_FILTER, parsed) : WANTED_FILTER;
     return {
@@ -118,7 +112,9 @@ export function SourcingOpportunities() {
           <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
             <ResinChips chips={parsed?.chips ?? null} />
             <p className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              {isLoading ? 'Loading requests' : `${visible.length} matching request${visible.length === 1 ? '' : 's'}`}
+              {isLoading
+                ? 'Loading requests'
+                : `${visible.length} matching request${visible.length === 1 ? '' : 's'}`}
             </p>
           </div>
         </div>
