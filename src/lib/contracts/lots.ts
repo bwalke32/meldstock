@@ -159,6 +159,9 @@ export const LotItem = z.object({
   postedByName: z.string(),
   postedByUserId: z.string().nullable(),
   postedByHandle: z.string().nullable(),
+  // Detail endpoints may tell the current viewer whether they own the
+  // request without exposing an anonymous poster's identity to anyone else.
+  viewerIsOwner: z.boolean().optional(),
   // Stamped by every lot endpoint from the poster's `Profile.role` —
   // true iff the role is `BROKER_TRADER`. Required on the wire so client
   // islands can branch on the broker-attached surface without a guessing
