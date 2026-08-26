@@ -3,10 +3,10 @@
 // hosting `<ResponseForm/>` which POSTs to
 // `/api/listings/[lotId]/responses`.
 //
-// Renders ONLY for a signed-in viewer who is NOT the lot poster — the
-// poster is the RFQ buyer and can't respond to their own RFQ (the
-// route rejects that case at 409). Anonymous lots and anonymous
-// viewers fall through to the existing free-text thread path.
+// Renders ONLY for a signed-in viewer who is NOT the lot poster. Signed-in
+// specialists may respond to identity-scrubbed requests; the server resolves
+// the real owner and opens a private thread without exposing that owner id on
+// the public wire.
 // Successful submit fires `wanted-responses:invalidate` so the
 // `<WantedResponsesSummary/>` re-fetches on this page (and any other
 // open /lots/[id] pages).
