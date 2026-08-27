@@ -35,7 +35,16 @@ export interface ChatOptions {
   model?: string;
   task?: string;
   temperature?: number;
-  responseFormat?: 'text' | 'json_object';
+  maxOutputTokens?: number;
+  responseFormat?:
+    | 'text'
+    | 'json_object'
+    | {
+        type: 'json_schema';
+        name: string;
+        schema: Record<string, unknown>;
+        strict?: boolean;
+      };
   signal?: AbortSignal;
 }
 
@@ -82,6 +91,26 @@ export async function generateObject<T = unknown>(opts: ChatOptions): Promise<T>
     });
     return JSON.parse(retry) as T;
   }
+}
+
+export async function generateStructuredObject<T>(
+  opts: Omit<ChatOptions, 'responseFormat'> & {
+    schemaName: string;
+    jsonSchema: Record<string, unknown>;
+    parse: (value: unknown) => T;
+  },
+): Promise<T> {
+  const { schemaName, jsonSchema, parse, ...chatOptions } = opts;
+  const raw = await chat({
+    ...chatOptions,
+    responseFormat: {
+      type: 'json_schema',
+      name: schemaName,
+      schema: jsonSchema,
+      strict: true,
+    },
+  });
+  return parse(JSON.parse(raw));
 }
 
 export interface AnalyzeImageOptions {

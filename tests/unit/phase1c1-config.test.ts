@@ -44,6 +44,13 @@ describe('Phase 1C.1 configuration', () => {
     ).resolves.toBeDefined();
   });
 
+  it('requires an API key only when the independent OpenAI adapter is selected', async () => {
+    await expect(loadEnv({ AI_PROVIDER: 'openai' })).rejects.toThrow(/OPENAI_API_KEY/);
+    await expect(
+      loadEnv({ AI_PROVIDER: 'openai', OPENAI_API_KEY: 'local-test-key' }),
+    ).resolves.toBeDefined();
+  });
+
   it('auth contains no automatic Polsia origins and uses generic admin bootstrap', () => {
     const source = readFileSync(new URL('../../src/lib/auth.ts', import.meta.url), 'utf8');
     expect(source).not.toContain('*.polsia.app');

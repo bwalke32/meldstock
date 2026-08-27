@@ -68,17 +68,17 @@ export default function MeldstockHome() {
               Software narrows the field. Experts solve the material problem.
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
-              No fake AI magic and no generic supplier directory. Meldstock uses structured resin
-              data for reliable search and alerts, then keeps experienced human judgment in the loop
-              for equivalents, qualification, and commercial fit.
+              Meldstock combines structured resin rules with a guarded AI intake pass, then keeps
+              experienced human judgment in the loop for equivalents, qualification, and commercial
+              fit.
             </p>
           </div>
 
           <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
             <EngineStep
               icon={<ScanSearch />}
-              title="1. Normalize"
-              body="Recognize polymer families, manufacturer grades, color, reinforcement, flame rating, melt flow, condition, and quantity."
+              title="1. Extract"
+              body="Turn an email or plain-language need into editable resin, grade, quantity, destination, timing, and technical fields."
             />
             <EngineStep
               icon={<DatabaseZap />}
