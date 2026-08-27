@@ -71,7 +71,7 @@ The safe local defaults require no Polsia credentials:
 |---|---|---|---|
 | Mail | `MAIL_PROVIDER` | `local` | Discards mail without logging recipient/body data |
 | Storage | `STORAGE_PROVIDER` | `local` | Private files under `LOCAL_STORAGE_PATH` (`.data/objects`) |
-| AI | `AI_PROVIDER` | `disabled` | No metered/network AI; deterministic fallback remains |
+| AI | `AI_PROVIDER` | `disabled` | No metered/network AI; material intake uses the deterministic fallback |
 | Analytics | `ANALYTICS_PROVIDER` | `disabled` | No-op; sends no analytics request |
 | Scheduler | `SCHEDULER_PROVIDER` | `manual` | No in-process schedule |
 
@@ -80,6 +80,30 @@ and do not make Polsia an approved deployment path. If legacy storage reads are
 explicitly enabled, `POLSIA_LEGACY_STORAGE_ORIGINS` must be a comma-separated
 allowlist of exact HTTPS origins known to have hosted historical Meldstock
 objects. An arbitrary URL is never a valid object reference.
+
+### Optional AI provider
+
+The application remains startup-safe with `AI_PROVIDER=disabled`. To exercise
+the independent OpenAI adapter in a controlled non-production environment, set:
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=<server-only project key>
+OPENAI_AI_BASE_URL=https://api.openai.com/v1
+```
+
+The key is server-only and must never use a `NEXT_PUBLIC_` name or be committed.
+The material-intake route requires an authenticated Meldstock session, applies
+the existing per-user AI rate limit, fixes the model/task server-side, limits
+input and output size, requests strict JSON Schema output, and sets `store: false`
+for OpenAI Responses API calls. Provider failures and disabled AI fall back to
+the local resin parser without exposing upstream error details.
+
+AI analysis returns an editable draft only. It does not create a listing,
+publish a request, approve an equivalent grade, or persist the raw analysis.
+The molder must explicitly submit the normal authenticated WANTED workflow after
+reviewing the extracted fields. An API key and a configured spending limit are
+operator prerequisites for enabling metered AI outside a disposable environment.
 
 ## Scheduled stale-inventory nudge
 

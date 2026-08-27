@@ -31,7 +31,7 @@ export const env = createEnv({
     // @polsia:contrib email start
     MAIL_PROVIDER: z.enum(['local', 'polsia']).default('local'),
     STORAGE_PROVIDER: z.enum(['local', 'polsia']).default('local'),
-    AI_PROVIDER: z.enum(['disabled', 'polsia']).default('disabled'),
+    AI_PROVIDER: z.enum(['disabled', 'openai', 'polsia']).default('disabled'),
     ANALYTICS_PROVIDER: z.enum(['disabled', 'polsia']).default('disabled'),
     SCHEDULER_PROVIDER: z.enum(['manual', 'polsia']).default('manual'),
     ENABLE_DEMO_SEED: z.enum(['0', '1']).default('0'),
@@ -41,6 +41,8 @@ export const env = createEnv({
     POLSIA_LEGACY_STORAGE_ORIGINS: z.string().optional(),
     // @polsia:contrib email end
     POLSIA_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_AI_BASE_URL: z.string().url().optional(),
     // @polsia:contrib ai start
     POLSIA_AI_BASE_URL: z.string().url().optional(),
     POLSIA_API_TOKEN: z.string().min(1).optional(),
@@ -86,6 +88,8 @@ export const env = createEnv({
     POLSIA_LEGACY_STORAGE_ORIGINS: process.env.POLSIA_LEGACY_STORAGE_ORIGINS,
     // @polsia:contrib email end
     POLSIA_API_KEY: process.env.POLSIA_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_AI_BASE_URL: process.env.OPENAI_AI_BASE_URL,
     // @polsia:contrib ai start
     POLSIA_AI_BASE_URL: process.env.POLSIA_AI_BASE_URL,
     POLSIA_API_TOKEN: process.env.POLSIA_API_TOKEN,
@@ -121,6 +125,8 @@ if (!process.env.SKIP_ENV_VALIDATION) {
       ['POLSIA_AI_BASE_URL', env.POLSIA_AI_BASE_URL],
       ['POLSIA_API_KEY or POLSIA_API_TOKEN', env.POLSIA_API_KEY ?? env.POLSIA_API_TOKEN],
     ]);
+  if (env.AI_PROVIDER === 'openai')
+    requireProviderValues('OpenAI AI', [['OPENAI_API_KEY', env.OPENAI_API_KEY]]);
   if (env.ANALYTICS_PROVIDER === 'polsia')
     requireProviderValues('Polsia analytics', [
       ['POLSIA_API_BASE_URL', env.POLSIA_API_BASE_URL],

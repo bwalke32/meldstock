@@ -29,7 +29,16 @@ export interface AiCompletionRequest {
   model?: string;
   task?: string;
   temperature?: number;
-  responseFormat?: 'text' | 'json_object';
+  maxOutputTokens?: number;
+  responseFormat?:
+    | 'text'
+    | 'json_object'
+    | {
+        type: 'json_schema';
+        name: string;
+        schema: Record<string, unknown>;
+        strict?: boolean;
+      };
   signal?: AbortSignal;
 }
 

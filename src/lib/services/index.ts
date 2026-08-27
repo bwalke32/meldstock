@@ -1,6 +1,6 @@
 import 'server-only';
 import path from 'node:path';
-import { DisabledAiService, PolsiaAiService } from './ai';
+import { DisabledAiService, OpenAiService, PolsiaAiService } from './ai';
 import { NoopAnalyticsService, PolsiaAnalyticsService } from './analytics';
 import { LocalMailService, PolsiaMailService } from './mail';
 import { LocalObjectStorage, PolsiaObjectStorage } from './storage';
@@ -32,7 +32,9 @@ export function createServices(config: NodeJS.ProcessEnv = process.env) {
             required('POLSIA_AI_BASE_URL'),
             config.POLSIA_API_KEY ?? required('POLSIA_API_TOKEN'),
           )
-        : new DisabledAiService(),
+        : config.AI_PROVIDER === 'openai'
+          ? new OpenAiService(required('OPENAI_API_KEY'), config.OPENAI_AI_BASE_URL)
+          : new DisabledAiService(),
     analytics:
       config.ANALYTICS_PROVIDER === 'polsia'
         ? new PolsiaAnalyticsService(

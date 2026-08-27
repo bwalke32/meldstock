@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { issueAttachmentToken, resolveAttachmentToken } from '@/lib/security/attachment-token';
-import { DisabledAiService } from '@/lib/services/ai';
+import { DisabledAiService, OpenAiService } from '@/lib/services/ai';
 import { NoopAnalyticsService } from '@/lib/services/analytics';
 import { LocalMailService } from '@/lib/services/mail';
 import { LocalObjectStorage } from '@/lib/services/storage';
@@ -79,5 +79,40 @@ describe('Phase 1C.1 independently invokable scheduled job', () => {
     const mail = { send: vi.fn() };
     await runStaleNudge({ prisma, mail, now: Date.now(), appUrl: 'http://localhost:3000' });
     expect(mail.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('independent OpenAI provider', () => {
+  it('uses Responses structured output without storing the request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      Response.json({
+        output: [{ content: [{ type: 'output_text', text: '{"material":"PA66"}' }] }],
+      }),
+    );
+    const service = new OpenAiService('server-key');
+
+    const output = await service.complete({
+      model: 'gpt-4o-mini',
+      task: 'material-intake',
+      messages: [{ role: 'user', content: 'Need PA66' }],
+      responseFormat: {
+        type: 'json_schema',
+        name: 'material_intake',
+        schema: { type: 'object', additionalProperties: false },
+        strict: true,
+      },
+    });
+
+    expect(output).toBe('{"material":"PA66"}');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({ method: 'POST', cache: 'no-store' }),
+    );
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.store).toBe(false);
+    expect(body.text.format).toMatchObject({ type: 'json_schema', name: 'material_intake' });
+    expect(body.metadata).toEqual({ task: 'material-intake' });
+    expect(JSON.stringify(body)).not.toContain('server-key');
   });
 });

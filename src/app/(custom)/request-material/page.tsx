@@ -23,11 +23,11 @@ export default function RequestMaterialPage() {
         <section>
           <span className="text-eyebrow">For injection molders</span>
           <h1 className="mt-4 max-w-3xl font-display text-h1 leading-[1.02] text-foreground">
-            Tell the network what resin you need.
+            Paste the requirement. Confirm the brief. Reach the right resin people.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Start with what you know. An exact grade is helpful, but a performance requirement and a
-            clear application can be enough for the right specialist to help.
+            Meldstock’s copilot extracts what is known, flags what is missing, and leaves every
+            field editable. Nothing reaches the specialist network until you approve it.
           </p>
 
           <div className="mt-9 rounded-xl border border-border bg-card p-5 shadow-sm sm:p-8">
