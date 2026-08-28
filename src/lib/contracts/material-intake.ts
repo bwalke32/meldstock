@@ -65,6 +65,14 @@ export const MaterialIntakeAnalysis = z
   .strict();
 export type MaterialIntakeAnalysis = z.infer<typeof MaterialIntakeAnalysis>;
 
+export const MaterialIntakeBatchAnalysis = z
+  .object({
+    engine: MaterialIntakeEngine,
+    items: z.array(MaterialIntakeAnalysis).min(1).max(8),
+  })
+  .strict();
+export type MaterialIntakeBatchAnalysis = z.infer<typeof MaterialIntakeBatchAnalysis>;
+
 // Provider-facing extraction shape. Every field is required by the JSON
 // schema, but unknown facts are null. That distinction keeps the model from
 // filling silence with plausible-sounding resin details.
@@ -96,3 +104,15 @@ export const MaterialIntakeExtraction = z
   })
   .strict();
 export type MaterialIntakeExtraction = z.infer<typeof MaterialIntakeExtraction>;
+
+export const MaterialIntakeBatchItemExtraction = MaterialIntakeExtraction.extend({
+  sourceText: z.string().trim().min(1).max(4000),
+}).strict();
+export type MaterialIntakeBatchItemExtraction = z.infer<typeof MaterialIntakeBatchItemExtraction>;
+
+export const MaterialIntakeBatchExtraction = z
+  .object({
+    items: z.array(MaterialIntakeBatchItemExtraction).min(1).max(8),
+  })
+  .strict();
+export type MaterialIntakeBatchExtraction = z.infer<typeof MaterialIntakeBatchExtraction>;

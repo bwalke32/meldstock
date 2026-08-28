@@ -14,11 +14,12 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { buildDeterministicMaterialIntake } from '@/lib/business/material-intake';
+import { buildDeterministicMaterialIntakeBatch } from '@/lib/business/material-intake';
 
 const DRAFT_KEY = 'meldstock:material-request-draft';
 
 const EXAMPLES = [
+  'Need 5,000/lbs. of Regrind ABS Injection-Grade Natural ASAP, FOB point is Romeoville, IL. Also looking for ~10-20k/lbs. of Regrind, PC Injection Grade 112 Blue-Tint Clear delivered to Romeoville, Illinois.',
   'Need 5,000 lbs of SABIC CYCOLOY C6600 Black delivered to Chicago, IL. Prime preferred, equivalents acceptable, UL94 V-0 required.',
   'Looking for PA66 GF33 natural, 2,204 lbs, exact grade only, delivered to Monterrey, Mexico by 2026-09-30.',
   'Need a 20 MFI black PP copolymer for injection molding. Annual usage is 250,000 lbs. First 42,000 lbs to Joliet, IL.',
@@ -30,10 +31,13 @@ export function ResinSourcingConsole() {
   const [error, setError] = React.useState<string | null>(null);
 
   const preview = React.useMemo(
-    () => (requestText.trim() ? buildDeterministicMaterialIntake(requestText) : null),
+    () => (requestText.trim() ? buildDeterministicMaterialIntakeBatch(requestText) : null),
     [requestText],
   );
-  const recognized = preview?.recognized ?? [];
+  const recognized =
+    preview?.items.flatMap((item, requestIndex) =>
+      item.recognized.slice(0, 6).map((field) => ({ ...field, requestIndex })),
+    ) ?? [];
   const coverage = Math.min(100, Math.round((recognized.length / 7) * 100));
 
   function continueRequest(event: React.FormEvent<HTMLFormElement>) {
@@ -44,20 +48,24 @@ export function ResinSourcingConsole() {
       return;
     }
 
-    const draft = buildDeterministicMaterialIntake(text).draft;
+    const batch = buildDeterministicMaterialIntakeBatch(text);
     window.localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({
+        version: 2,
         sourceText: text,
-        material: draft.material,
-        condition: draft.condition,
-        color: draft.color,
-        quantityLb: draft.quantityLb?.toString() ?? '',
-        destination: draft.destination,
-        country: draft.country,
-        neededBy: draft.neededBy,
-        equivalentAllowed: draft.equivalentAllowed,
-        details: draft.details,
+        drafts: batch.items.map(({ draft }) => ({
+          material: draft.material,
+          condition: draft.condition,
+          color: draft.color,
+          quantityLb: draft.quantityLb?.toString() ?? '',
+          destination: draft.destination,
+          country: draft.country,
+          neededBy: draft.neededBy,
+          equivalentAllowed: draft.equivalentAllowed,
+          details: draft.details,
+        })),
+        createdRequests: {},
       }),
     );
     router.push('/request-material');
@@ -96,7 +104,7 @@ export function ResinSourcingConsole() {
               autoFocus
             />
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>Paste an email, resin shorthand, or a full specification.</span>
+              <span>Paste a full email—even when it contains several materials.</span>
               <span className="font-mono tabular-nums">{requestText.length}/4000</span>
             </div>
           </div>
@@ -143,7 +151,11 @@ export function ResinSourcingConsole() {
                 Instant local preview
               </p>
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
-                {requestText ? 'Requirement taking shape' : 'Waiting for a requirement'}
+                {requestText
+                  ? preview && preview.items.length > 1
+                    ? `${preview.items.length} requests taking shape`
+                    : 'Requirement taking shape'
+                  : 'Waiting for a requirement'}
               </h2>
             </div>
             <span className="flex size-11 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
@@ -167,11 +179,12 @@ export function ResinSourcingConsole() {
           <div className="mt-6 min-h-28 rounded-lg border border-border bg-background p-4">
             {recognized.length ? (
               <div className="flex flex-wrap gap-2">
-                {recognized.slice(0, 8).map((item) => (
+                {recognized.slice(0, 12).map((item) => (
                   <span
-                    key={`${item.field}-${item.value}`}
+                    key={`${item.requestIndex}-${item.field}-${item.value}`}
                     className="rounded-full border border-primary/20 bg-primary/8 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-primary"
                   >
+                    {preview && preview.items.length > 1 ? `R${item.requestIndex + 1} · ` : ''}
                     {item.label} · {item.value}
                   </span>
                 ))}

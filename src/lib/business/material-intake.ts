@@ -2,6 +2,7 @@ import { normalizeResinInput } from '@/lib/business/resin-normalize';
 import type { LotCondition } from '@/lib/contracts/lots';
 import type {
   MaterialIntakeAnalysis,
+  MaterialIntakeBatchAnalysis,
   MaterialIntakeEngine,
   MaterialIntakeExtraction,
 } from '@/lib/contracts/material-intake';
@@ -12,7 +13,8 @@ const DETAILS_LIMIT = 1000;
 export function deterministicMaterialExtraction(requestText: string): MaterialIntakeExtraction {
   const source = normalizeSpace(requestText);
   const parsed = normalizeResinInput(source, { mode: 'write', polymerCandidate: 'OTHER' });
-  const quantityLb = extractPounds(source);
+  const quantityRange = extractPoundRange(source);
+  const quantityLb = quantityRange?.min ?? extractPounds(source);
   const destination = extractDestination(source);
   const neededBy = extractIsoDate(source);
   const equivalency = extractEquivalency(source);
@@ -20,10 +22,15 @@ export function deterministicMaterialExtraction(requestText: string): MaterialIn
   return {
     material: extractMaterial(source),
     manufacturer: null,
-    grade: parsed.gradeCanonical?.slice(0, 80) ?? null,
+    // The shared grade normalizer is intentionally not copied into listing
+    // details here: on pasted emails its broad canonical text can absorb a
+    // signature or quoted thread. The concise material field remains the
+    // deterministic source; configured AI may extract a separately validated
+    // grade.
+    grade: null,
     polymer: parsed.polymers[0] ?? null,
     condition: extractCondition(source),
-    color: parsed.color,
+    color: extractColorDescriptor(source) ?? parsed.color,
     quantityLb,
     destination,
     country: extractCountry(source, destination),
@@ -36,9 +43,71 @@ export function deterministicMaterialExtraction(requestText: string): MaterialIn
     packaging: extractPackaging(source),
     annualUsageLb: extractAnnualUsage(source),
     certifications: extractCertifications(source),
-    notes: [],
-    cautions: [],
+    notes: [
+      ...(quantityRange?.max
+        ? [
+            `Requested quantity range: ${formatNumber(quantityRange.min)}-${formatNumber(quantityRange.max)} lb`,
+          ]
+        : []),
+      ...(/\bASAP\b/i.test(source) ? ['Timing requested: ASAP'] : []),
+    ],
+    cautions: [
+      ...(quantityRange?.max
+        ? ['The minimum of the stated quantity range is used for matching; confirm the full range.']
+        : []),
+      ...(/\bFOB\s+point\b/i.test(source)
+        ? [
+            'Confirm whether the FOB point is the delivery destination or only the freight-pricing point.',
+          ]
+        : []),
+    ],
   };
+}
+
+/**
+ * Split only on strong request boundaries. Ordinary commas and conjunctions
+ * stay untouched because they often describe one blend, grade, or condition.
+ */
+export function splitMaterialRequests(requestText: string): string[] {
+  const normalized = stripQuotedEmailTail(requestText.replace(/\r\n?/g, '\n')).trim();
+  if (!normalized) return [];
+  const boundary = '\u001f';
+
+  const marked = normalized
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
+    .replace(/\n\s*(?:[-*•]|\d+[.)])\s+/g, boundary)
+    .replace(
+      /(?:[.!?;]\s+|\n+)(?=(?:also\s+)?(?:need|looking\s+for|requesting|seeking|source|sourcing)\b)/gi,
+      boundary,
+    )
+    .replace(
+      /\s+(?=(?:also|additionally)\s+(?:need|looking\s+for|requesting|seeking|sourcing)\b)/gi,
+      boundary,
+    )
+    .replace(/\n+/g, ' ');
+
+  const candidates = marked
+    .split(boundary)
+    .map((item) =>
+      normalizeSpace(item)
+        .replace(/^(?:also|additionally)\s+/i, '')
+        .trim(),
+    )
+    .filter((item) => item.length >= 8);
+  const likelyRequests = candidates.filter(looksLikeMaterialRequest);
+  const items = likelyRequests.length ? likelyRequests : candidates;
+
+  return (items.length ? items : [normalizeSpace(normalized)]).slice(0, 8);
+}
+
+function looksLikeMaterialRequest(value: string): boolean {
+  const parsed = normalizeResinInput(value, { mode: 'write', polymerCandidate: 'OTHER' });
+  if (parsed.polymers.length > 0) return true;
+  return (
+    /\b(?:need|looking\s+for|requesting|seeking|source|sourcing|quote(?:\s+needed)?\s+for)\b/i.test(
+      value,
+    ) && /\b(?:resin|material|grade|regrind|repro|prime|virgin|pellets?|scrap)\b/i.test(value)
+  );
 }
 
 export function mergeMaterialExtraction(
@@ -46,7 +115,7 @@ export function mergeMaterialExtraction(
   ai: MaterialIntakeExtraction,
 ): MaterialIntakeExtraction {
   const deterministic = deterministicMaterialExtraction(requestText);
-  const cautions = [...ai.cautions];
+  const cautions = [...deterministic.cautions, ...ai.cautions];
 
   // A single unambiguous parser hit wins over a conflicting model polymer.
   // The deterministic parser is shared with listing writes and search, so this
@@ -72,12 +141,12 @@ export function mergeMaterialExtraction(
     glassFiberPercent: deterministic.glassFiberPercent ?? ai.glassFiberPercent,
     meltFlow: deterministic.meltFlow ?? ai.meltFlow,
     certifications: dedupe([...deterministic.certifications, ...ai.certifications]),
+    notes: dedupe([...deterministic.notes, ...ai.notes]).slice(0, 8),
     cautions: dedupe(cautions).slice(0, 6),
   };
 }
 
 export function materialExtractionToAnalysis(
-  requestText: string,
   extracted: MaterialIntakeExtraction,
   engine: MaterialIntakeEngine,
 ): MaterialIntakeAnalysis {
@@ -96,7 +165,18 @@ export function materialExtractionToAnalysis(
     addRecognized(recognized, 'condition', 'Condition', humanizeEnum(condition), 'medium');
   }
   addRecognized(recognized, 'color', 'Color', color, 'high');
-  if (extracted.quantityLb) {
+  const quantityRangeNote = extracted.notes.find((note) =>
+    note.startsWith('Requested quantity range:'),
+  );
+  if (quantityRangeNote) {
+    addRecognized(
+      recognized,
+      'quantity',
+      'Quantity',
+      quantityRangeNote.replace('Requested quantity range:', '').trim(),
+      'high',
+    );
+  } else if (extracted.quantityLb) {
     addRecognized(
       recognized,
       'quantity',
@@ -107,7 +187,14 @@ export function materialExtractionToAnalysis(
   }
   addRecognized(recognized, 'destination', 'Destination', destination, 'medium');
   addRecognized(recognized, 'country', 'Country', country, 'medium');
-  addRecognized(recognized, 'neededBy', 'Needed by', neededBy, 'medium');
+  const timingAsap = extracted.notes.includes('Timing requested: ASAP');
+  addRecognized(
+    recognized,
+    'neededBy',
+    'Needed by',
+    neededBy || (timingAsap ? 'ASAP' : ''),
+    'medium',
+  );
   if (extracted.equivalentAllowed !== null) {
     addRecognized(
       recognized,
@@ -135,9 +222,15 @@ export function materialExtractionToAnalysis(
     questions.push('Must the material be prime, or are other conditions acceptable?');
   if (!extracted.application)
     questions.push('What part or application will the resin be used for?');
-  if (!neededBy) questions.push('When is the material required?');
+  if (!neededBy) {
+    questions.push(
+      timingAsap
+        ? 'What calendar date should “ASAP” mean for this request?'
+        : 'When is the material required?',
+    );
+  }
 
-  const details = buildDetails(requestText, extracted);
+  const details = buildDetails(extracted);
   const cautions = dedupe([
     ...extracted.cautions,
     ...(engine === 'ai'
@@ -167,10 +260,18 @@ export function materialExtractionToAnalysis(
 
 export function buildDeterministicMaterialIntake(requestText: string): MaterialIntakeAnalysis {
   return materialExtractionToAnalysis(
-    requestText,
     deterministicMaterialExtraction(requestText),
     'deterministic',
   );
+}
+
+export function buildDeterministicMaterialIntakeBatch(
+  requestText: string,
+): MaterialIntakeBatchAnalysis {
+  return {
+    engine: 'deterministic',
+    items: splitMaterialRequests(requestText).map(buildDeterministicMaterialIntake),
+  };
 }
 
 function addRecognized(
@@ -184,7 +285,7 @@ function addRecognized(
   items.push({ field, label, value: value.slice(0, 160), confidence });
 }
 
-function buildDetails(source: string, extracted: MaterialIntakeExtraction): string {
+function buildDetails(extracted: MaterialIntakeExtraction): string {
   const lines = [
     extracted.manufacturer ? `Manufacturer: ${extracted.manufacturer}` : null,
     extracted.grade ? `Grade: ${extracted.grade}` : null,
@@ -202,8 +303,24 @@ function buildDetails(source: string, extracted: MaterialIntakeExtraction): stri
     ...extracted.notes.map((note) => `Note: ${note}`),
   ].filter((line): line is string => Boolean(line));
 
-  const prefix = lines.length ? `${lines.join('\n')}\nOriginal request: ` : 'Original request: ';
-  return `${prefix}${normalizeSpace(source)}`.slice(0, DETAILS_LIMIT);
+  // Raw pasted email text stays in the browser draft and analysis request. It
+  // is not copied into a public-facing listing where signatures, names, phone
+  // numbers, or quoted email history could expose the requester or customer.
+  return lines.map(redactContactDetails).join('\n').slice(0, DETAILS_LIMIT);
+}
+
+function stripQuotedEmailTail(source: string): string {
+  return (
+    source.split(
+      /\n\s*(?:thanks(?:,|\s|$)|best(?:\s+regards)?,?|regards,?|sincerely,?|sent\s+from\s+my\b|on\s+.+\s+wrote:|from:\s+.+)/i,
+    )[0] ?? source
+  );
+}
+
+function redactContactDetails(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email removed]')
+    .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, '[phone removed]');
 }
 
 function technicalSummary(extracted: MaterialIntakeExtraction): string | null {
@@ -224,23 +341,42 @@ function extractMaterial(source: string): string | null {
     /^(?:need|looking for|requesting|quote(?: needed)? for|source|sourcing)\s+/i,
     '',
   );
-  const firstClause = withoutLead.split(
-    /(?:\s+delivered\s+to|\s+ship(?:ped)?\s+to|\s+needed\s+by|[.;\n])/i,
+  const withoutQuantity = withoutLead.replace(
+    /^\s*~?[\d,.]+(?:\s*[-–]\s*[\d,.]+)?\s*k?\s*\/?\s*(?:lbs?|pounds)\.?\s*(?:of\s+)?/i,
+    '',
+  );
+  const firstClause = withoutQuantity.split(
+    /(?:\s+delivered\s+to|\s+ship(?:ped)?\s+to|\s+needed\s+by|\s+ASAP\b|\s+FOB\s+(?:point\s+)?(?:is\s+)?|[.;\n])/i,
   )[0];
   if (!firstClause) return null;
   return (
     firstClause
-      .replace(/^\s*[\d,.]+\s*(?:lb|lbs|pounds)\s+(?:of\s+)?/i, '')
+      .replace(
+        /^(?:prime|virgin|off[- ]?grade|wide[- ]?spec|repro(?:cessed)?|regrind|granulat(?:e|ed))\s*,?\s*/i,
+        '',
+      )
       .trim()
       .slice(0, MATERIAL_LIMIT) || null
   );
 }
 
 function extractPounds(source: string): number | null {
-  const match = source.match(/\b([\d,.]+)\s*(?:lb|lbs|pounds)\b/i);
+  const match = source.match(/(?:^|\b)([\d,.]+)\s*(k)?\s*\/?\s*(?:lb|lbs|pounds)\b/i);
   if (!match?.[1]) return null;
-  const value = Number(match[1].replace(/,/g, ''));
+  const value = Number(match[1].replace(/,/g, '')) * (match[2] ? 1000 : 1);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function extractPoundRange(source: string): { min: number; max: number | null } | null {
+  const range = source.match(
+    /(?:^|\b)~?\s*([\d,.]+)\s*(k)?\s*[-–]\s*([\d,.]+)\s*(k)?\s*\/?\s*(?:lb|lbs|pounds)\b/i,
+  );
+  if (!range?.[1] || !range[3]) return null;
+  const usesThousands = Boolean(range[2] || range[4]);
+  const left = Number(range[1].replace(/,/g, '')) * (usesThousands ? 1000 : 1);
+  const right = Number(range[3].replace(/,/g, '')) * (usesThousands ? 1000 : 1);
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) return null;
+  return { min: Math.min(left, right), max: Math.max(left, right) };
 }
 
 function extractAnnualUsage(source: string): number | null {
@@ -254,7 +390,7 @@ function extractAnnualUsage(source: string): number | null {
 
 function extractDestination(source: string): string | null {
   const match = source.match(
-    /\b(?:deliver(?:ed)?\s+to|ship(?:ped)?\s+to|destination\s*[:-]?)\s+([^.;\n]{2,160})/i,
+    /\b(?:deliver(?:ed)?\s+to|ship(?:ped)?\s+to|destination\s*[:-]?|FOB\s+point(?:\s+is)?)\s+([^.;\n]{2,160})/i,
   );
   if (!match?.[1]) return null;
   return match[1]
@@ -268,6 +404,13 @@ function extractCountry(source: string, destination: string | null): string | nu
   if (/\bCanada\b/i.test(source)) return 'Canada';
   if (/\bMexico\b/i.test(source)) return 'Mexico';
   if (destination && /,\s*[A-Z]{2}(?:\s+\d{5})?$/i.test(destination)) return 'USA';
+  if (
+    destination &&
+    /,\s*(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)$/i.test(
+      destination,
+    )
+  )
+    return 'USA';
   return null;
 }
 
@@ -304,6 +447,17 @@ function extractCondition(source: string): LotCondition | null {
     [/\b(?:masterbatch|compound)\b/i, 'MASTERBATCH_COMPOUND'],
   ];
   return checks.find(([pattern]) => pattern.test(source))?.[1] ?? null;
+}
+
+function extractColorDescriptor(source: string): string | null {
+  const tintedClear = source.match(
+    /\b((?:blue|green|gray|grey|amber|smoke|red)[ -]?tint(?:ed)?\s+clear)\b/i,
+  )?.[1];
+  if (tintedClear) {
+    const tintColor = tintedClear.match(/^\w+/)?.[0] ?? '';
+    return `${tintColor[0]?.toUpperCase() ?? ''}${tintColor.slice(1).toLowerCase()}-Tint Clear`;
+  }
+  return null;
 }
 
 function extractMeltFlow(source: string): string | null {

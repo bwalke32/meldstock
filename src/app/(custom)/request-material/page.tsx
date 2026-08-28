@@ -6,7 +6,7 @@ import { siteName } from '@/lib/site';
 export const metadata: Metadata = {
   title: `Request material — ${siteName}`,
   description:
-    'Send one private thermoplastic material request to brokers and resin sales specialists matched to the grade, volume, timing, and destination.',
+    'Turn one or more thermoplastic material needs into separate private requests for brokers and resin sourcing specialists.',
   alternates: { canonical: '/request-material' },
 };
 
@@ -26,8 +26,9 @@ export default function RequestMaterialPage() {
             Paste the requirement. Confirm the brief. Reach the right resin people.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Meldstock’s copilot extracts what is known, flags what is missing, and leaves every
-            field editable. Nothing reaches the specialist network until you approve it.
+            Meldstock’s copilot separates each material, extracts what is known, flags what is
+            missing, and leaves every field editable. Nothing reaches the specialist network until
+            you approve each request.
           </p>
 
           <div className="mt-9 rounded-xl border border-border bg-card p-5 shadow-sm sm:p-8">
