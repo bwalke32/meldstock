@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeterministicMaterialIntake,
+  buildDeterministicMaterialIntakeBatch,
   deterministicMaterialExtraction,
   mergeMaterialExtraction,
+  splitMaterialRequests,
 } from '@/lib/business/material-intake';
 import type { MaterialIntakeExtraction } from '@/lib/contracts/material-intake';
 
@@ -76,5 +78,55 @@ describe('material intake normalization', () => {
       'Need 1,102 lbs of CELCON M90 natural. Exact grade only; no substitutions.',
     );
     expect(result.equivalentAllowed).toBe(false);
+  });
+
+  it('splits the reported ABS and PC email into two independent requests', () => {
+    const source =
+      'Need 5,000/lbs. of Regrind ABS Injection-Grade Natural ASAP, FOB point is Romeoville, IL. Also looking for ~10-20k/lbs. of Regrind, PC Injection Grade 112 Blue-Tint Clear delivered to Romeoville, Illinois.';
+
+    expect(splitMaterialRequests(source)).toHaveLength(2);
+    const batch = buildDeterministicMaterialIntakeBatch(source);
+
+    expect(batch.items).toHaveLength(2);
+    expect(batch.items[0]?.draft).toMatchObject({
+      material: 'ABS Injection-Grade Natural',
+      condition: 'REGRIND_GRANULATED',
+      color: 'Natural',
+      quantityLb: 5_000,
+      destination: 'Romeoville, IL',
+      country: 'USA',
+    });
+    expect(batch.items[0]?.recognized).toContainEqual(
+      expect.objectContaining({ field: 'neededBy', value: 'ASAP' }),
+    );
+    expect(batch.items[0]?.cautions.join(' ')).toContain('freight-pricing point');
+    expect(batch.items[1]?.draft).toMatchObject({
+      material: 'PC Injection Grade 112 Blue-Tint Clear',
+      condition: 'REGRIND_GRANULATED',
+      color: 'Blue-Tint Clear',
+      quantityLb: 10_000,
+      destination: 'Romeoville, Illinois',
+      country: 'USA',
+    });
+    expect(batch.items[1]?.recognized).toContainEqual(
+      expect.objectContaining({ field: 'quantity', value: '10,000-20,000 lb' }),
+    );
+    expect(batch.items[1]?.draft.details).toContain('Requested quantity range: 10,000-20,000 lb');
+  });
+
+  it('ignores an email greeting while preserving bullet-separated material needs', () => {
+    const source =
+      'Hi Brandon,\nPlease quote the following:\n- 5,000 lbs regrind ABS natural delivered to Joliet, IL\n- 20,000 lbs prime PP black delivered to Dallas, TX\nThanks,\nBuyer buyer@example.com';
+    const items = splitMaterialRequests(source);
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain('ABS natural');
+    expect(items[1]).toContain('PP black');
+    expect(items.join(' ')).not.toContain('Hi Brandon');
+
+    const batch = buildDeterministicMaterialIntakeBatch(source);
+    expect(batch.items.map((item) => item.draft.details).join(' ')).not.toContain(
+      'buyer@example.com',
+    );
   });
 });

@@ -30,13 +30,12 @@ import { type MaterialRequestDraft, materialRequestToLot } from '@/lib/business/
 import { type LotCondition, type LotItem, LotItem as LotItemSchema } from '@/lib/contracts/lots';
 import {
   type MaterialIntakeAnalysis,
-  MaterialIntakeAnalysis as MaterialIntakeAnalysisSchema,
+  MaterialIntakeBatchAnalysis,
 } from '@/lib/contracts/material-intake';
 
 const DRAFT_KEY = 'meldstock:material-request-draft';
 
 interface FormState {
-  sourceText: string;
   material: string;
   condition: LotCondition;
   color: string;
@@ -49,7 +48,6 @@ interface FormState {
 }
 
 const DEFAULT_STATE: FormState = {
-  sourceText: '',
   material: '',
   condition: 'PRIME_VIRGIN',
   color: '',
@@ -74,30 +72,53 @@ const CONDITION_KEYS: LotCondition[] = [
 export function MaterialRequestForm() {
   const router = useRouter();
   const { data: session, isPending: sessionPending } = useSession();
-  const [state, setState] = React.useState<FormState>(DEFAULT_STATE);
+  const [sourceText, setSourceText] = React.useState('');
+  const [drafts, setDrafts] = React.useState<FormState[]>([DEFAULT_STATE]);
+  const [analyses, setAnalyses] = React.useState<MaterialIntakeAnalysis[]>([]);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [createdRequests, setCreatedRequests] = React.useState<Record<number, string>>({});
   const [pending, setPending] = React.useState(false);
   const [analyzing, setAnalyzing] = React.useState(false);
-  const [analysis, setAnalysis] = React.useState<MaterialIntakeAnalysis | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const state = drafts[activeIndex] ?? DEFAULT_STATE;
+  const analysis = analyses[activeIndex] ?? null;
+  const createdRequestId = createdRequests[activeIndex];
 
   React.useEffect(() => {
     try {
       const saved = window.localStorage.getItem(DRAFT_KEY);
       if (!saved) return;
-      const parsed = JSON.parse(saved) as Partial<FormState>;
-      setState((current) => ({ ...current, ...parsed }));
+      const parsed = JSON.parse(saved) as {
+        sourceText?: string;
+        drafts?: Array<Partial<FormState>>;
+        createdRequests?: Record<number, string>;
+      } & Partial<FormState>;
+      setSourceText(parsed.sourceText ?? '');
+      setCreatedRequests(parsed.createdRequests ?? {});
+      if (Array.isArray(parsed.drafts) && parsed.drafts.length) {
+        setDrafts(parsed.drafts.map((draft) => ({ ...DEFAULT_STATE, ...draft })));
+      } else {
+        // Read the single-request Phase 1C.5 browser draft once, then persist
+        // the new batch format on the next edit.
+        setDrafts([{ ...DEFAULT_STATE, ...parsed }]);
+      }
     } catch {
       window.localStorage.removeItem(DRAFT_KEY);
     }
   }, []);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setState((current) => ({ ...current, [key]: value }));
+    setDrafts((current) => {
+      const next = [...current];
+      next[activeIndex] = { ...(next[activeIndex] ?? DEFAULT_STATE), [key]: value };
+      persistDraft(sourceText, next, createdRequests);
+      return next;
+    });
     setError(null);
   };
 
   async function analyzeRequirement() {
-    const requestText = state.sourceText.trim();
+    const requestText = sourceText.trim();
     setError(null);
     if (requestText.length < 8) {
       setError('Paste or describe the material requirement before analyzing it.');
@@ -105,7 +126,7 @@ export function MaterialRequestForm() {
     }
 
     if (!session?.user) {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+      persistDraft(sourceText, drafts, createdRequests);
       toast.info('Your requirement is saved. Create a free account to run the private analysis.');
       window.location.assign('/signup?role=molder&next=/request-material');
       return;
@@ -116,24 +137,29 @@ export function MaterialRequestForm() {
       const result = await apiFetch('/api/ai/material-intake', {
         method: 'POST',
         body: JSON.stringify({ requestText }),
-        schema: MaterialIntakeAnalysisSchema,
+        schema: MaterialIntakeBatchAnalysis,
       });
-      const next: FormState = {
-        ...state,
-        material: result.draft.material,
-        condition: result.draft.condition,
-        color: result.draft.color,
-        quantityLb: result.draft.quantityLb?.toString() ?? '',
-        destination: result.draft.destination,
-        country: result.draft.country,
-        neededBy: result.draft.neededBy,
-        equivalentAllowed: result.draft.equivalentAllowed,
-        details: result.draft.details,
-      };
-      setState(next);
-      setAnalysis(result);
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-      toast.success('Sourcing brief prepared. Review every field before sending.');
+      const next = result.items.map<FormState>((item) => ({
+        material: item.draft.material,
+        condition: item.draft.condition,
+        color: item.draft.color,
+        quantityLb: item.draft.quantityLb?.toString() ?? '',
+        destination: item.draft.destination,
+        country: item.draft.country,
+        neededBy: item.draft.neededBy,
+        equivalentAllowed: item.draft.equivalentAllowed,
+        details: item.draft.details,
+      }));
+      setDrafts(next);
+      setAnalyses(result.items);
+      setActiveIndex(0);
+      setCreatedRequests({});
+      persistDraft(sourceText, next, {});
+      toast.success(
+        result.items.length === 1
+          ? 'One sourcing brief prepared. Review every field before sending.'
+          : `${result.items.length} separate requests found. Review and send each one.`,
+      );
     } catch {
       setError('Meldstock could not analyze the requirement. You can still complete it manually.');
     } finally {
@@ -160,7 +186,7 @@ export function MaterialRequestForm() {
     }
 
     if (!session?.user) {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+      persistDraft(sourceText, drafts, createdRequests);
       toast.info('Your request is saved. Create a free account to send it privately.');
       window.location.assign('/signup?role=molder&next=/request-material');
       return;
@@ -185,13 +211,45 @@ export function MaterialRequestForm() {
         body: JSON.stringify(materialRequestToLot(draft)),
         schema: LotItemSchema,
       });
-      window.localStorage.removeItem(DRAFT_KEY);
-      toast.success('Your material request is ready for specialist responses.');
-      router.push(`/lots/${created.id}`);
+      if (drafts.length === 1) {
+        window.localStorage.removeItem(DRAFT_KEY);
+        toast.success('Your material request is ready for specialist responses.');
+        router.push(`/lots/${created.id}`);
+        return;
+      }
+
+      const sent = { ...createdRequests, [activeIndex]: created.id };
+      setCreatedRequests(sent);
+      persistDraft(sourceText, drafts, sent);
+      toast.success(`Request ${activeIndex + 1} is ready for specialist responses.`);
+      const nextUnsent = drafts.findIndex((_, index) => !sent[index]);
+      if (nextUnsent >= 0) {
+        setActiveIndex(nextUnsent);
+      } else {
+        window.localStorage.removeItem(DRAFT_KEY);
+        toast.success('All material requests have been sent separately.');
+      }
+      setPending(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not send the request. Try again.');
       setPending(false);
     }
+  }
+
+  function persistDraft(
+    rawSource: string,
+    currentDrafts: FormState[],
+    sent: Record<number, string> = createdRequests,
+  ) {
+    window.localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        version: 2,
+        sourceText: rawSource,
+        drafts: currentDrafts,
+        createdRequests: sent,
+      }),
+    );
   }
 
   return (
@@ -210,8 +268,8 @@ export function MaterialRequestForm() {
                 Turn the raw requirement into an editable sourcing brief.
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Paste an email or type naturally. Meldstock extracts commercial and technical facts,
-                then asks only for what is missing.
+                Paste an entire email or type naturally. Meldstock separates different material
+                needs, extracts the facts, and builds one private draft per material.
               </p>
             </div>
           </div>
@@ -225,15 +283,18 @@ export function MaterialRequestForm() {
             <Label htmlFor="source-text">Raw material request</Label>
             <Textarea
               id="source-text"
-              value={state.sourceText}
-              onChange={(event) => update('sourceText', event.target.value)}
-              placeholder="Need 5,000 lbs of SABIC CYCOLOY C6600 Black delivered to Chicago within three weeks. Prime preferred; UL94 V-0 required; equivalents acceptable."
+              value={sourceText}
+              onChange={(event) => {
+                setSourceText(event.target.value);
+                persistDraft(event.target.value, drafts, createdRequests);
+              }}
+              placeholder="Need 5,000 lbs of regrind ABS natural delivered to Chicago. Also looking for 10–20k lbs of regrind PC 112 blue-tint clear."
               className="min-h-32 resize-y bg-background leading-6"
               maxLength={4000}
             />
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>Nothing is published by the analysis.</span>
-              <span className="font-mono tabular-nums">{state.sourceText.length}/4000</span>
+              <span>Different materials become separate drafts. Nothing is published.</span>
+              <span className="font-mono tabular-nums">{sourceText.length}/4000</span>
             </div>
           </div>
 
@@ -254,6 +315,53 @@ export function MaterialRequestForm() {
                 ? 'Analyze and build brief'
                 : 'Continue to private analysis'}
           </Button>
+
+          {drafts.length > 1 ? (
+            <div className="border-t border-primary/15 pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-foreground">
+                  {drafts.length} separate material requests found
+                </p>
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Send separately
+                </p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {drafts.map((draft, index) => {
+                  const sentId = createdRequests[index];
+                  return (
+                    <button
+                      key={`${index}-${draft.material}`}
+                      type="button"
+                      onClick={() => {
+                        setActiveIndex(index);
+                        setError(null);
+                      }}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        activeIndex === index
+                          ? 'border-primary bg-background shadow-sm'
+                          : 'border-border bg-background/65 hover:border-primary/45'
+                      }`}
+                    >
+                      <span className="flex items-center justify-between gap-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
+                        Request {index + 1}
+                        {sentId ? 'Sent' : 'Review'}
+                      </span>
+                      <span className="mt-1 block truncate text-sm font-semibold text-foreground">
+                        {draft.material || 'Material needs confirmation'}
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {draft.quantityLb
+                          ? `${Number(draft.quantityLb).toLocaleString()} lb`
+                          : 'Quantity missing'}
+                        {draft.destination ? ` · ${draft.destination}` : ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {analysis ? (
             <div className="grid gap-4 border-t border-primary/15 pt-5 lg:grid-cols-[1fr_0.9fr]">
@@ -312,7 +420,9 @@ export function MaterialRequestForm() {
 
       <div className="border-t border-border pt-1">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-          Review and confirm
+          {drafts.length > 1
+            ? `Review request ${activeIndex + 1} of ${drafts.length}`
+            : 'Review and confirm'}
         </p>
       </div>
 
@@ -466,14 +576,35 @@ export function MaterialRequestForm() {
           Your identity is hidden on the request. Specialists respond through a private Meldstock
           conversation.
         </p>
-        <Button type="submit" size="lg" className="h-12 px-6" disabled={pending || sessionPending}>
-          {pending
-            ? 'Sending request…'
-            : session?.user
-              ? 'Send private request'
-              : 'Continue to send'}
-          {!pending ? <ArrowRight className="ml-1 size-4" aria-hidden /> : null}
-        </Button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          {createdRequestId ? (
+            <a
+              href={`/lots/${createdRequestId}`}
+              className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              Open sent request {activeIndex + 1}
+            </a>
+          ) : null}
+          <Button
+            type="submit"
+            size="lg"
+            className="h-12 px-6"
+            disabled={pending || sessionPending || Boolean(createdRequestId)}
+          >
+            {createdRequestId
+              ? 'Request sent'
+              : pending
+                ? 'Sending request…'
+                : session?.user
+                  ? drafts.length > 1
+                    ? `Send request ${activeIndex + 1} privately`
+                    : 'Send private request'
+                  : 'Continue to send'}
+            {!pending && !createdRequestId ? (
+              <ArrowRight className="ml-1 size-4" aria-hidden />
+            ) : null}
+          </Button>
+        </div>
       </div>
     </form>
   );

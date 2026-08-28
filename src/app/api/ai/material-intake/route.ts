@@ -2,15 +2,18 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 import { generateStructuredObject } from '@/lib/ai/client';
-import { MATERIAL_INTAKE_JSON_SCHEMA, materialIntakeInstructions } from '@/lib/ai/material-intake';
 import {
-  buildDeterministicMaterialIntake,
+  MATERIAL_INTAKE_BATCH_JSON_SCHEMA,
+  materialIntakeInstructions,
+} from '@/lib/ai/material-intake';
+import {
+  buildDeterministicMaterialIntakeBatch,
   materialExtractionToAnalysis,
   mergeMaterialExtraction,
 } from '@/lib/business/material-intake';
 import {
-  MaterialIntakeAnalysis,
-  MaterialIntakeExtraction,
+  MaterialIntakeBatchAnalysis,
+  MaterialIntakeBatchExtraction,
   MaterialIntakeRequest,
 } from '@/lib/contracts/material-intake';
 import { requireAuth, type SessionUser } from '@/lib/require-auth';
@@ -46,7 +49,7 @@ export async function POST(req: Request) {
   }
 
   const { requestText } = parsed.data;
-  const deterministic = buildDeterministicMaterialIntake(requestText);
+  const deterministic = buildDeterministicMaterialIntakeBatch(requestText);
 
   try {
     const today = new Date().toISOString().slice(0, 10);
@@ -54,10 +57,10 @@ export async function POST(req: Request) {
       model: 'gpt-4o-mini',
       task: 'material-intake',
       temperature: 0.1,
-      maxOutputTokens: 900,
-      schemaName: 'meldstock_material_intake',
-      jsonSchema: MATERIAL_INTAKE_JSON_SCHEMA as unknown as Record<string, unknown>,
-      parse: (value) => MaterialIntakeExtraction.parse(value),
+      maxOutputTokens: 1800,
+      schemaName: 'meldstock_material_intake_batch',
+      jsonSchema: MATERIAL_INTAKE_BATCH_JSON_SCHEMA as unknown as Record<string, unknown>,
+      parse: (value) => MaterialIntakeBatchExtraction.parse(value),
       messages: [
         { role: 'system', content: materialIntakeInstructions(today) },
         {
@@ -67,13 +70,25 @@ export async function POST(req: Request) {
       ],
       signal: AbortSignal.timeout(20_000),
     });
-    const merged = mergeMaterialExtraction(requestText, extracted);
-    const analysis = materialExtractionToAnalysis(requestText, merged, 'ai');
-    return NextResponse.json(MaterialIntakeAnalysis.parse(analysis));
+
+    // If the local boundary detector found more independent needs than the
+    // provider, prefer the conservative local split over silently dropping a
+    // request. Each item still remains an editable draft.
+    if (deterministic.items.length > extracted.items.length) {
+      return NextResponse.json(MaterialIntakeBatchAnalysis.parse(deterministic));
+    }
+
+    const analysis = {
+      engine: 'ai' as const,
+      items: extracted.items.map(({ sourceText, ...item }) =>
+        materialExtractionToAnalysis(mergeMaterialExtraction(sourceText, item), 'ai'),
+      ),
+    };
+    return NextResponse.json(MaterialIntakeBatchAnalysis.parse(analysis));
   } catch {
     // Disabled provider, timeout, malformed provider output, and upstream
     // failures all fall back to the same local parser. No provider detail or
     // credential-shaped error ever crosses the response boundary.
-    return NextResponse.json(MaterialIntakeAnalysis.parse(deterministic));
+    return NextResponse.json(MaterialIntakeBatchAnalysis.parse(deterministic));
   }
 }
